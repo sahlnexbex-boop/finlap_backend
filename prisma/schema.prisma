@@ -1,0 +1,105 @@
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id            String   @id @default(uuid())
+  name          String
+  email         String   @unique
+  avatarUrl     String?
+  currency      String   @default("USD")
+  memberTier    String   @default("Platinum Member")
+  proBadge      Boolean  @default(true)
+  biometrics    Boolean  @default(true)
+  notifications Boolean  @default(true)
+  securityPin   String   @default("1234")
+  theme         String   @default("Midnight Slate")
+  language      String   @default("English (US)")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model BusinessEntity {
+  id           String        @id @default(uuid())
+  name         String
+  subtitle     String?
+  isPrimary    Boolean       @default(false)
+  transactions Transaction[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+}
+
+model Wallet {
+  id          String   @id @default(uuid())
+  name        String
+  type        String
+  accountNo   String
+  balance     Float
+  currency    String   @default("USD")
+  cardHolder  String
+  expiry      String
+  cardType    String
+  colorAccent String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Transaction {
+  id               String          @id @default(uuid())
+  title            String
+  merchant         String
+  amount           Float
+  type             String          // EXPENSE, INCOME, TRANSFER
+  category         String
+  date             String
+  time             String
+  status           String          @default("COMPLETED")
+  walletId         String?
+  walletName       String?
+  businessEntityId String?
+  businessEntity   BusinessEntity? @relation(fields: [businessEntityId], references: [id])
+  businessName     String?
+  note             String?
+  fundingSource    String?         @default("Chase Business")
+  isRecurring      Boolean         @default(false)
+  attachmentUrl    String?
+  icon             String          @default("building")
+  createdAt        DateTime        @default(now())
+}
+
+model Budget {
+  id        String   @id @default(uuid())
+  category  String   @unique
+  limit     Float
+  spent     Float    @default(0.0)
+  icon      String
+  color     String
+  period    String   @default("MONTHLY")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Goal {
+  id         String   @id @default(uuid())
+  title      String
+  target     Float
+  current    Float
+  category   String
+  targetDate String
+  color      String
+  createdAt  DateTime @default(now())
+}
+
+model NetWorthHistory {
+  id          String   @id @default(uuid())
+  month       String
+  netWorth    Float
+  assets      Float
+  liabilities Float
+  createdAt   DateTime @default(now())
+}
