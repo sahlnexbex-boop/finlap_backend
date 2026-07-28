@@ -1,6 +1,6 @@
 datasource db {
-  provider = "sqlite"
-  url      = "file:./dev.db"
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 generator client {
@@ -11,7 +11,12 @@ model User {
   id            String   @id @default(uuid())
   name          String
   email         String   @unique
+  password      String?
   avatarUrl     String?
+  country       String?
+  sex           String?
+  place         String?
+  phone         String?
   currency      String   @default("USD")
   memberTier    String   @default("Platinum Member")
   proBadge      Boolean  @default(true)
@@ -26,6 +31,7 @@ model User {
 
 model BusinessEntity {
   id           String        @id @default(uuid())
+  userId       String
   name         String
   subtitle     String?
   isPrimary    Boolean       @default(false)
@@ -34,8 +40,33 @@ model BusinessEntity {
   updatedAt    DateTime      @updatedAt
 }
 
+model Account {
+  id        String   @id @default(uuid())
+  userId    String
+  name      String
+  type      String   // "bank", "cash", "credit_card", "digital_wallet"
+  balance   Float    @default(0)
+  icon      String   @default("landmark")
+  color     String   @default("#3B82F6")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Category {
+  id        String   @id @default(uuid())
+  userId    String
+  name      String
+  icon      String   @default("tag")
+  color     String   @default("#8B5CF6")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, name])
+}
+
 model Wallet {
   id          String   @id @default(uuid())
+  userId      String
   name        String
   type        String
   accountNo   String
@@ -51,10 +82,11 @@ model Wallet {
 
 model Transaction {
   id               String          @id @default(uuid())
+  userId           String
   title            String
   merchant         String
   amount           Float
-  type             String          // EXPENSE, INCOME, TRANSFER
+  type             Int             @db.SmallInt // 1 = income, 0 = expense
   category         String
   date             String
   time             String
@@ -67,14 +99,15 @@ model Transaction {
   note             String?
   fundingSource    String?         @default("Chase Business")
   isRecurring      Boolean         @default(false)
-  attachmentUrl    String?
+  attachment       String?
   icon             String          @default("building")
   createdAt        DateTime        @default(now())
 }
 
 model Budget {
   id        String   @id @default(uuid())
-  category  String   @unique
+  userId    String
+  category  String
   limit     Float
   spent     Float    @default(0.0)
   icon      String
@@ -82,10 +115,13 @@ model Budget {
   period    String   @default("MONTHLY")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@unique([userId, category])
 }
 
 model Goal {
   id         String   @id @default(uuid())
+  userId     String
   title      String
   target     Float
   current    Float
@@ -97,6 +133,7 @@ model Goal {
 
 model NetWorthHistory {
   id          String   @id @default(uuid())
+  userId      String
   month       String
   netWorth    Float
   assets      Float

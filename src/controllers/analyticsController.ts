@@ -1,13 +1,18 @@
 import { Request, Response } from 'express';
 import { prisma } from '../db';
+import { resolveRequestUserId } from './userController';
 
 export const getAnalytics = async (req: Request, res: Response) => {
   try {
+    const userId = resolveRequestUserId(req);
     const history = await prisma.netWorthHistory.findMany({
+      where: { userId } as any,
       orderBy: { createdAt: 'asc' },
     });
 
-    const budgets = await prisma.budget.findMany();
+    const budgets = await prisma.budget.findMany({
+      where: { userId } as any,
+    });
 
     const categoryBreakdown = budgets.map((b) => ({
       category: b.category,

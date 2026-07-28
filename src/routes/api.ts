@@ -1,19 +1,59 @@
 import { Router } from 'express';
 import { getOverview } from '../controllers/overviewController';
-import { getTransactions, createTransaction, deleteTransaction } from '../controllers/transactionController';
+import {
+  getTransactions,
+  createTransaction,
+  deleteTransaction,
+  uploadTransactionAttachment,
+  transactionAttachmentUpload,
+} from '../controllers/transactionController';
 import { getBudgets, updateBudget, createGoal } from '../controllers/budgetController';
 import { getWallets, createWallet } from '../controllers/walletController';
 import { getAnalytics } from '../controllers/analyticsController';
-import { getUserProfile, updateUserSettings } from '../controllers/userController';
+import {
+  getUserProfile,
+  updateUserSettings,
+  loginUser,
+  registerUser,
+  logoutUser,
+  verifyToken,
+  uploadAvatar,
+} from '../controllers/userController';
+import {
+  getBusinessEntities,
+  createBusinessEntity,
+  updateBusinessEntity,
+  deleteBusinessEntity,
+} from '../controllers/businessEntityController';
+import {
+  getAccounts,
+  createAccount,
+  updateAccount,
+  deleteAccount,
+} from '../controllers/accountController';
+import {
+  getCategories,
+  createCategory,
+  updateCategory,
+  deleteCategory,
+} from '../controllers/categoryController';
 
 const router = Router();
+
+// Auth Endpoints
+router.post('/auth/login', loginUser);
+router.post('/auth/register', registerUser);
+router.post('/auth/logout', logoutUser);
+router.get('/auth/verify', verifyToken);
+router.post('/auth/upload-avatar', uploadAvatar);
 
 // Overview
 router.get('/overview', getOverview);
 
 // Transactions
 router.get('/transactions', getTransactions);
-router.post('/transactions', createTransaction);
+router.post('/transactions', transactionAttachmentUpload.single('attachment'), createTransaction);
+router.post('/transactions/upload-attachment', uploadTransactionAttachment);
 router.delete('/transactions/:id', deleteTransaction);
 
 // Budgets & Goals
@@ -31,5 +71,23 @@ router.get('/analytics', getAnalytics);
 // User Profile & Settings
 router.get('/user/profile', getUserProfile);
 router.put('/user/settings', updateUserSettings);
+
+// Business Entities
+router.get('/business-entities', getBusinessEntities);
+router.post('/business-entities', createBusinessEntity);
+router.put('/business-entities/:id', updateBusinessEntity);
+router.delete('/business-entities/:id', deleteBusinessEntity);
+
+// Accounts
+router.get('/accounts', getAccounts);
+router.post('/accounts', createAccount);
+router.put('/accounts/:id', updateAccount);
+router.delete('/accounts/:id', deleteAccount);
+
+// Categories
+router.get('/categories', getCategories);
+router.post('/categories', createCategory);
+router.put('/categories/:id', updateCategory);
+router.delete('/categories/:id', deleteCategory);
 
 export default router;

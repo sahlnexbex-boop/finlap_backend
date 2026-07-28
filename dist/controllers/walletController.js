@@ -2,9 +2,14 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createWallet = exports.getWallets = void 0;
 const db_1 = require("../db");
+const userController_1 = require("./userController");
 const getWallets = async (req, res) => {
     try {
-        const wallets = await db_1.prisma.wallet.findMany();
+        const userId = (0, userController_1.resolveRequestUserId)(req);
+        const wallets = await db_1.prisma.wallet.findMany({
+            where: { userId },
+            orderBy: { createdAt: 'desc' },
+        });
         const totalBalance = wallets.reduce((acc, w) => acc + w.balance, 0);
         res.json({
             success: true,
@@ -19,9 +24,11 @@ const getWallets = async (req, res) => {
 exports.getWallets = getWallets;
 const createWallet = async (req, res) => {
     try {
+        const userId = (0, userController_1.resolveRequestUserId)(req);
         const { name, type, accountNo, balance, cardHolder, expiry, cardType, colorAccent } = req.body;
         const wallet = await db_1.prisma.wallet.create({
             data: {
+                userId,
                 name,
                 type: type || 'CHECKING',
                 accountNo: accountNo || '•••• ' + Math.floor(1000 + Math.random() * 9000),

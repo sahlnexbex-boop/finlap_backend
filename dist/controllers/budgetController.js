@@ -2,10 +2,18 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createGoal = exports.updateBudget = exports.getBudgets = void 0;
 const db_1 = require("../db");
+const userController_1 = require("./userController");
 const getBudgets = async (req, res) => {
     try {
-        const budgets = await db_1.prisma.budget.findMany();
-        const goals = await db_1.prisma.goal.findMany();
+        const userId = (0, userController_1.resolveRequestUserId)(req);
+        const budgets = await db_1.prisma.budget.findMany({
+            where: { userId },
+            orderBy: { createdAt: 'desc' },
+        });
+        const goals = await db_1.prisma.goal.findMany({
+            where: { userId },
+            orderBy: { createdAt: 'desc' },
+        });
         const totalBudgetLimit = budgets.reduce((acc, b) => acc + b.limit, 0);
         const totalBudgetSpent = budgets.reduce((acc, b) => acc + b.spent, 0);
         res.json({
@@ -27,8 +35,13 @@ const getBudgets = async (req, res) => {
 exports.getBudgets = getBudgets;
 const updateBudget = async (req, res) => {
     try {
+        const userId = (0, userController_1.resolveRequestUserId)(req);
         const { id } = req.params;
         const { limit, spent } = req.body;
+        const existing = await db_1.prisma.budget.findFirst({ where: { id, userId } });
+        if (!existing) {
+            return res.status(404).json({ success: false, error: 'Budget not found' });
+        }
         const budget = await db_1.prisma.budget.update({
             where: { id },
             data: {
@@ -45,9 +58,11 @@ const updateBudget = async (req, res) => {
 exports.updateBudget = updateBudget;
 const createGoal = async (req, res) => {
     try {
+        const userId = (0, userController_1.resolveRequestUserId)(req);
         const { title, target, current, category, targetDate, color } = req.body;
         const goal = await db_1.prisma.goal.create({
             data: {
+                userId,
                 title,
                 target: parseFloat(target),
                 current: parseFloat(current || 0),

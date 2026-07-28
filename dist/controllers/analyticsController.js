@@ -2,12 +2,17 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getAnalytics = void 0;
 const db_1 = require("../db");
+const userController_1 = require("./userController");
 const getAnalytics = async (req, res) => {
     try {
+        const userId = (0, userController_1.resolveRequestUserId)(req);
         const history = await db_1.prisma.netWorthHistory.findMany({
+            where: { userId },
             orderBy: { createdAt: 'asc' },
         });
-        const budgets = await db_1.prisma.budget.findMany();
+        const budgets = await db_1.prisma.budget.findMany({
+            where: { userId },
+        });
         const categoryBreakdown = budgets.map((b) => ({
             category: b.category,
             amount: b.spent,

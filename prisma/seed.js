@@ -5,7 +5,7 @@ const prisma = new client_1.PrismaClient();
 async function seed() {
     console.log('Seeding FinLap database...');
     // User
-    await prisma.user.upsert({
+    const user = await prisma.user.upsert({
         where: { email: 'alex.vance@finlap.io' },
         update: {},
         create: {
@@ -21,6 +21,7 @@ async function seed() {
     await prisma.wallet.createMany({
         data: [
             {
+                userId: user.id,
                 name: 'Aura Platinum Card',
                 type: 'CHECKING',
                 accountNo: '•••• 4892',
@@ -32,6 +33,7 @@ async function seed() {
                 colorAccent: '#3b82f6',
             },
             {
+                userId: user.id,
                 name: 'High Yield Savings',
                 type: 'SAVINGS',
                 accountNo: '•••• 9102',
@@ -43,6 +45,7 @@ async function seed() {
                 colorAccent: '#4edea3',
             },
             {
+                userId: user.id,
                 name: 'Venture Capital Wallet',
                 type: 'BUSINESS',
                 accountNo: '•••• 3311',
@@ -59,18 +62,18 @@ async function seed() {
     await prisma.budget.deleteMany({});
     await prisma.budget.createMany({
         data: [
-            { category: 'Dining & Experiences', limit: 1500.0, spent: 840.20, icon: 'utensils', color: '#3b82f6' },
-            { category: 'Technology & Hardware', limit: 2000.0, spent: 1450.00, icon: 'laptop', color: '#4edea3' },
-            { category: 'Travel & Aviation', limit: 3000.0, spent: 1280.50, icon: 'plane', color: '#adc6ff' },
-            { category: 'Shopping & Apparel', limit: 1200.0, spent: 640.10, icon: 'shopping-bag', color: '#ffb4ab' },
+            { userId: user.id, category: 'Dining & Experiences', limit: 1500.0, spent: 840.20, icon: 'utensils', color: '#3b82f6' },
+            { userId: user.id, category: 'Technology & Hardware', limit: 2000.0, spent: 1450.00, icon: 'laptop', color: '#4edea3' },
+            { userId: user.id, category: 'Travel & Aviation', limit: 3000.0, spent: 1280.50, icon: 'plane', color: '#adc6ff' },
+            { userId: user.id, category: 'Shopping & Apparel', limit: 1200.0, spent: 640.10, icon: 'shopping-bag', color: '#ffb4ab' },
         ],
     });
     // Goals
     await prisma.goal.deleteMany({});
     await prisma.goal.createMany({
         data: [
-            { title: 'Real Estate Fund', target: 100000.0, current: 65000.0, category: 'Investment', targetDate: '2026-12-31', color: '#4edea3' },
-            { title: 'New Porsche Taycan', target: 140000.0, current: 48000.0, category: 'Vehicle', targetDate: '2027-06-30', color: '#3b82f6' },
+            { userId: user.id, title: 'Real Estate Fund', target: 100000.0, current: 65000.0, category: 'Investment', targetDate: '2026-12-31', color: '#4edea3' },
+            { userId: user.id, title: 'New Porsche Taycan', target: 140000.0, current: 48000.0, category: 'Vehicle', targetDate: '2027-06-30', color: '#3b82f6' },
         ],
     });
     // Transactions
@@ -78,10 +81,11 @@ async function seed() {
     await prisma.transaction.createMany({
         data: [
             {
+                userId: user.id,
                 title: 'Apple Store Regent St',
                 merchant: 'Apple Inc.',
                 amount: 1499.00,
-                type: 'EXPENSE',
+                type: 0,
                 category: 'Technology & Hardware',
                 date: '2026-07-22',
                 time: '14:32',
@@ -90,10 +94,11 @@ async function seed() {
                 icon: 'laptop',
             },
             {
+                userId: user.id,
                 title: 'Stripe Payout - SaaS Revenue',
                 merchant: 'Stripe Payments',
                 amount: 8500.00,
-                type: 'INCOME',
+                type: 1,
                 category: 'Salary',
                 date: '2026-07-21',
                 time: '09:00',
@@ -102,10 +107,11 @@ async function seed() {
                 icon: 'arrow-down-left',
             },
             {
+                userId: user.id,
                 title: 'Nobu Restaurant Dinner',
                 merchant: 'Nobu Hospitality',
                 amount: 384.50,
-                type: 'EXPENSE',
+                type: 0,
                 category: 'Dining & Experiences',
                 date: '2026-07-20',
                 time: '21:15',
@@ -114,10 +120,11 @@ async function seed() {
                 icon: 'utensils',
             },
             {
+                userId: user.id,
                 title: 'Emirates First Class Flight',
                 merchant: 'Emirates Airlines',
                 amount: 1280.50,
-                type: 'EXPENSE',
+                type: 0,
                 category: 'Travel & Aviation',
                 date: '2026-07-18',
                 time: '11:45',
@@ -126,10 +133,11 @@ async function seed() {
                 icon: 'plane',
             },
             {
+                userId: user.id,
                 title: 'Dividend Distribution',
                 merchant: 'Vanguard Group',
                 amount: 2400.00,
-                type: 'INCOME',
+                type: 1,
                 category: 'Investments',
                 date: '2026-07-15',
                 time: '08:30',
@@ -143,12 +151,12 @@ async function seed() {
     await prisma.netWorthHistory.deleteMany({});
     await prisma.netWorthHistory.createMany({
         data: [
-            { month: 'Feb', netWorth: 110000.0, assets: 125000.0, liabilities: 15000.0 },
-            { month: 'Mar', netWorth: 118500.0, assets: 132000.0, liabilities: 13500.0 },
-            { month: 'Apr', netWorth: 124200.0, assets: 136000.0, liabilities: 11800.0 },
-            { month: 'May', netWorth: 131800.0, assets: 142000.0, liabilities: 10200.0 },
-            { month: 'Jun', netWorth: 138400.0, assets: 147000.0, liabilities: 8600.0 },
-            { month: 'Jul', netWorth: 142850.45, assets: 151000.0, liabilities: 8149.55 },
+            { userId: user.id, month: 'Feb', netWorth: 110000.0, assets: 125000.0, liabilities: 15000.0 },
+            { userId: user.id, month: 'Mar', netWorth: 118500.0, assets: 132000.0, liabilities: 13500.0 },
+            { userId: user.id, month: 'Apr', netWorth: 124200.0, assets: 136000.0, liabilities: 11800.0 },
+            { userId: user.id, month: 'May', netWorth: 131800.0, assets: 142000.0, liabilities: 10200.0 },
+            { userId: user.id, month: 'Jun', netWorth: 138400.0, assets: 147000.0, liabilities: 8600.0 },
+            { userId: user.id, month: 'Jul', netWorth: 142850.45, assets: 151000.0, liabilities: 8149.55 },
         ],
     });
     console.log('Seeding completed successfully!');

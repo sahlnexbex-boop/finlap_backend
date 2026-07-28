@@ -1,9 +1,14 @@
 import { Request, Response } from 'express';
 import { prisma } from '../db';
+import { resolveRequestUserId } from './userController';
 
 export const getWallets = async (req: Request, res: Response) => {
   try {
-    const wallets = await prisma.wallet.findMany();
+    const userId = resolveRequestUserId(req);
+    const wallets = await prisma.wallet.findMany({
+      where: { userId } as any,
+      orderBy: { createdAt: 'desc' },
+    });
     const totalBalance = wallets.reduce((acc, w) => acc + w.balance, 0);
 
     res.json({
@@ -18,10 +23,12 @@ export const getWallets = async (req: Request, res: Response) => {
 
 export const createWallet = async (req: Request, res: Response) => {
   try {
+    const userId = resolveRequestUserId(req);
     const { name, type, accountNo, balance, cardHolder, expiry, cardType, colorAccent } = req.body;
 
     const wallet = await prisma.wallet.create({
       data: {
+        userId,
         name,
         type: type || 'CHECKING',
         accountNo: accountNo || '•••• ' + Math.floor(1000 + Math.random() * 9000),
@@ -30,7 +37,7 @@ export const createWallet = async (req: Request, res: Response) => {
         expiry: expiry || '12/28',
         cardType: cardType || 'VISA',
         colorAccent: colorAccent || '#3b82f6',
-      },
+      } as any,
     });
 
     res.status(201).json({ success: true, data: wallet });

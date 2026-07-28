@@ -11,6 +11,7 @@ async function seed() {
     data: {
       name: 'Julian Sterling',
       email: 'julian.sterling@finlap.io',
+      password: 'password123',
       currency: 'USD',
       memberTier: 'Platinum Member',
       proBadge: true,
@@ -26,6 +27,7 @@ async function seed() {
   await prisma.businessEntity.deleteMany({});
   const nexus = await prisma.businessEntity.create({
     data: {
+      userId: user.id,
       name: 'Nexus Dynamics LLC',
       subtitle: 'Primary Operating Unit',
       isPrimary: true,
@@ -34,6 +36,7 @@ async function seed() {
 
   const bizA = await prisma.businessEntity.create({
     data: {
+      userId: user.id,
       name: 'Business A',
       subtitle: 'Inventory & Operations',
       isPrimary: false,
@@ -42,6 +45,7 @@ async function seed() {
 
   const techSol = await prisma.businessEntity.create({
     data: {
+      userId: user.id,
       name: 'Tech Solutions LLC',
       subtitle: 'Software & Infrastructure',
       isPrimary: false,
@@ -50,10 +54,43 @@ async function seed() {
 
   const vertex = await prisma.businessEntity.create({
     data: {
+      userId: user.id,
       name: 'Vertex Agency',
       subtitle: 'Client Services',
       isPrimary: false,
     },
+  });
+
+  await prisma.account.deleteMany({});
+  await prisma.account.createMany({
+    data: [
+      {
+        userId: user.id,
+        name: 'Chase Business',
+        type: 'bank',
+        balance: 1248590.0,
+        icon: 'landmark',
+        color: '#3B82F6',
+      },
+      {
+        userId: user.id,
+        name: 'Office Cash',
+        type: 'cash',
+        balance: 2500.0,
+        icon: 'wallet',
+        color: '#10B981',
+      },
+    ],
+  });
+
+  await prisma.category.deleteMany({});
+  await prisma.category.createMany({
+    data: [
+      { userId: user.id, name: 'Software', icon: 'code', color: '#8B5CF6' },
+      { userId: user.id, name: 'Payroll', icon: 'users', color: '#A78BFA' },
+      { userId: user.id, name: 'Services', icon: 'briefcase', color: '#10B981' },
+      { userId: user.id, name: 'Inventory Order', icon: 'building', color: '#F59E0B' },
+    ],
   });
 
   // Wallets
@@ -61,6 +98,7 @@ async function seed() {
   await prisma.wallet.createMany({
     data: [
       {
+        userId: user.id,
         name: 'Chase Business Operating',
         type: 'BUSINESS',
         accountNo: '•••• 8821',
@@ -72,6 +110,7 @@ async function seed() {
         colorAccent: '#8b5cf6',
       },
       {
+        userId: user.id,
         name: 'High Yield Treasury',
         type: 'SAVINGS',
         accountNo: '•••• 9102',
@@ -90,10 +129,11 @@ async function seed() {
   await prisma.transaction.createMany({
     data: [
       {
+        userId: user.id,
         title: 'Business A',
         merchant: 'Business A Supplier',
         amount: -1184.50,
-        type: 'EXPENSE',
+        type: 0,
         category: 'Inventory Order',
         date: 'Oct 24, 2023',
         time: '2:45 PM',
@@ -106,10 +146,11 @@ async function seed() {
         icon: 'building',
       },
       {
+        userId: user.id,
         title: 'Tech Solutions LLC',
         merchant: 'Tech Solutions LLC',
         amount: -245.00,
-        type: 'EXPENSE',
+        type: 0,
         category: 'Software',
         date: 'Yesterday',
         time: '10:15 AM',
@@ -122,10 +163,11 @@ async function seed() {
         icon: 'code',
       },
       {
+        userId: user.id,
         title: 'Vertex Agency',
         merchant: 'Vertex Agency',
         amount: 8550.00,
-        type: 'INCOME',
+        type: 1,
         category: 'Services',
         date: 'Oct 24',
         time: '09:00 AM',
@@ -144,10 +186,10 @@ async function seed() {
   await prisma.budget.deleteMany({});
   await prisma.budget.createMany({
     data: [
-      { category: 'Software', limit: 2000.0, spent: 245.0, icon: 'code', color: '#8b5cf6' },
-      { category: 'Payroll', limit: 15000.0, spent: 8500.0, icon: 'users', color: '#a78bfa' },
-      { category: 'Services', limit: 5000.0, spent: 1184.5, icon: 'briefcase', color: '#c4b5fd' },
-      { category: 'Office', limit: 1000.0, spent: 320.0, icon: 'building', color: '#6366f1' },
+      { userId: user.id, category: 'Software', limit: 2000.0, spent: 245.0, icon: 'code', color: '#8b5cf6' },
+      { userId: user.id, category: 'Payroll', limit: 15000.0, spent: 8500.0, icon: 'users', color: '#a78bfa' },
+      { userId: user.id, category: 'Services', limit: 5000.0, spent: 1184.5, icon: 'briefcase', color: '#c4b5fd' },
+      { userId: user.id, category: 'Office', limit: 1000.0, spent: 320.0, icon: 'building', color: '#6366f1' },
     ],
   });
 
@@ -155,7 +197,7 @@ async function seed() {
   await prisma.goal.deleteMany({});
   await prisma.goal.createMany({
     data: [
-      { title: 'Series A Capital Reserve', target: 2000000.0, current: 1248590.0, category: 'Corporate', targetDate: '2026-12-31', color: '#8b5cf6' },
+      { userId: user.id, title: 'Series A Capital Reserve', target: 2000000.0, current: 1248590.0, category: 'Corporate', targetDate: '2026-12-31', color: '#8b5cf6' },
     ],
   });
 
@@ -163,13 +205,13 @@ async function seed() {
   await prisma.netWorthHistory.deleteMany({});
   await prisma.netWorthHistory.createMany({
     data: [
-      { month: 'MON', netWorth: 1100000.0, assets: 1150000.0, liabilities: 50000.0 },
-      { month: 'TUE', netWorth: 1120000.0, assets: 1170000.0, liabilities: 50000.0 },
-      { month: 'WED', netWorth: 1150000.0, assets: 1200000.0, liabilities: 50000.0 },
-      { month: 'THU', netWorth: 1248590.0, assets: 1298590.0, liabilities: 50000.0 },
-      { month: 'FRI', netWorth: 1210000.0, assets: 1260000.0, liabilities: 50000.0 },
-      { month: 'SAT', netWorth: 1230000.0, assets: 1280000.0, liabilities: 50000.0 },
-      { month: 'SUN', netWorth: 1248590.0, assets: 1298590.0, liabilities: 50000.0 },
+      { userId: user.id, month: 'MON', netWorth: 1100000.0, assets: 1150000.0, liabilities: 50000.0 },
+      { userId: user.id, month: 'TUE', netWorth: 1120000.0, assets: 1170000.0, liabilities: 50000.0 },
+      { userId: user.id, month: 'WED', netWorth: 1150000.0, assets: 1200000.0, liabilities: 50000.0 },
+      { userId: user.id, month: 'THU', netWorth: 1248590.0, assets: 1298590.0, liabilities: 50000.0 },
+      { userId: user.id, month: 'FRI', netWorth: 1210000.0, assets: 1260000.0, liabilities: 50000.0 },
+      { userId: user.id, month: 'SAT', netWorth: 1230000.0, assets: 1280000.0, liabilities: 50000.0 },
+      { userId: user.id, month: 'SUN', netWorth: 1248590.0, assets: 1298590.0, liabilities: 50000.0 },
     ],
   });
 

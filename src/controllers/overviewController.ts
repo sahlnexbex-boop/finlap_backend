@@ -1,112 +1,148 @@
 import { Request, Response } from 'express';
 import { prisma } from '../db';
+import { resolveRequestUserId } from './userController';
+
+const TRANSACTION_TYPE = {
+  EXPENSE: 0,
+  INCOME: 1,
+} as const;
+
+const isIncomeTransaction = (transaction: { type: unknown; amount: number }) =>
+  transaction.type === TRANSACTION_TYPE.INCOME ||
+  transaction.type === '1' ||
+  transaction.type === 'INCOME' ||
+  (transaction.type !== TRANSACTION_TYPE.EXPENSE && transaction.type !== '0' && transaction.type !== 'EXPENSE' && transaction.amount > 0);
+
+const buildFallbackUserEmail = (userId: string) => {
+  const cleanId = userId.toLowerCase().replace(/[^a-z0-9._-]/g, '-');
+  return `${cleanId || 'user'}@finlap.local`;
+};
+
+const transactionSummarySelect = {
+  id: true,
+  userId: true,
+  title: true,
+  merchant: true,
+  amount: true,
+  type: true,
+  category: true,
+  date: true,
+  time: true,
+  status: true,
+  walletId: true,
+  walletName: true,
+  businessEntityId: true,
+  businessName: true,
+  note: true,
+  fundingSource: true,
+  isRecurring: true,
+  icon: true,
+  createdAt: true,
+} as const;
+
+const userSelect = {
+  id: true,
+  name: true,
+  email: true,
+  avatarUrl: true,
+  country: true,
+  sex: true,
+  place: true,
+  phone: true,
+  currency: true,
+  memberTier: true,
+  proBadge: true,
+  biometrics: true,
+  notifications: true,
+  securityPin: true,
+  theme: true,
+  language: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
 
 export const getOverview = async (req: Request, res: Response) => {
   try {
-    let user = await prisma.user.findFirst();
+    const userId = resolveRequestUserId(req);
+
+    let user = await prisma.user.findUnique({ where: { id: userId }, select: userSelect }).catch(() => null);
     if (!user) {
-      user = await prisma.user.create({
-        data: {
-          name: 'Julian Sterling',
-          email: 'julian.sterling@finlap.io',
-          currency: 'USD',
-          memberTier: 'Platinum Member',
-          proBadge: true,
-          biometrics: true,
-          notifications: true,
-          securityPin: '1234',
-        },
-      });
+      const fallbackEmail = buildFallbackUserEmail(userId);
+      user = await prisma.user
+        .create({
+          data: {
+            id: userId,
+            name: 'FinLap User',
+            email: fallbackEmail,
+            currency: 'USD',
+            memberTier: 'Platinum Member',
+            proBadge: true,
+            biometrics: true,
+            notifications: true,
+            securityPin: '1234',
+          },
+        })
+        .catch(async (error: any) => {
+          if (error?.code === 'P2002') {
+            return prisma.user.findUnique({ where: { email: fallbackEmail }, select: userSelect });
+          }
+          throw error;
+        });
     }
 
-    const transactions = await prisma.transaction.findMany({
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+
+    const userTransactions = await prisma.transaction.findMany({
+      where: { userId },
       orderBy: { createdAt: 'desc' },
-      take: 10,
+      select: transactionSummarySelect,
     });
 
-    const businessEntities = await prisma.businessEntity.findMany();
+    const allTx = userTransactions;
+
+    const totalIncomeAmount = allTx
+      .filter(isIncomeTransaction)
+      .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+    const totalExpenseAmount = allTx
+      .filter((t) => !isIncomeTransaction(t))
+      .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+    const totalTransactionAmount = totalIncomeAmount - totalExpenseAmount;
+
+    const growthPercent =
+      totalIncomeAmount > 0 ? Math.round((totalTransactionAmount / totalIncomeAmount) * 100 * 10) / 10 : 0;
+
+    const dayNames = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+    const currentDayIndex = (new Date().getDay() + 6) % 7; // Mon=0 .. Sun=6
+    const baseVals = [40, 65, 50, 85, 45, 75, 90];
+    const weeklyAnalytics = dayNames.map((day, idx) => {
+      return {
+        day,
+        val: baseVals[idx],
+        active: idx === currentDayIndex,
+      };
+    });
+
+    const businessEntities = await prisma.businessEntity.findMany({
+      where: { userId },
+    });
 
     res.json({
       user,
-      portfolioValue: 1248590.00,
-      growthPercent: 12.4,
-      spendingPulse: 248,
-      budgetPercent: 85,
-      weeklyAnalytics: [
-        { day: 'MON', val: 40 },
-        { day: 'TUE', val: 65 },
-        { day: 'WED', val: 50 },
-        { day: 'THU', val: 85, active: true },
-        { day: 'FRI', val: 45 },
-        { day: 'SAT', val: 75 },
-        { day: 'SUN', val: 90 },
-      ],
-      recentTransactions: transactions,
+      total: totalTransactionAmount,
+      income_total: totalIncomeAmount,
+      expense_total: totalExpenseAmount,
+      totalTransactionAmount,
+      totalIncomeAmount,
+      totalExpenseAmount,
+      growthPercent,
+      weeklyAnalytics,
+      recentTransactions: allTx.slice(0, 10),
       businessEntities,
     });
   } catch (error) {
-    res.json({
-      user: {
-        name: 'Julian Sterling',
-        email: 'julian.sterling@finlap.io',
-        currency: 'USD',
-        memberTier: 'Platinum Member',
-        proBadge: true,
-        biometrics: true,
-        notifications: true,
-        securityPin: '1234',
-      },
-      portfolioValue: 1248590.00,
-      growthPercent: 12.4,
-      spendingPulse: 248,
-      budgetPercent: 85,
-      weeklyAnalytics: [
-        { day: 'MON', val: 40 },
-        { day: 'TUE', val: 65 },
-        { day: 'WED', val: 50 },
-        { day: 'THU', val: 85, active: true },
-        { day: 'FRI', val: 45 },
-        { day: 'SAT', val: 75 },
-        { day: 'SUN', val: 90 },
-      ],
-      recentTransactions: [
-        {
-          id: '1',
-          title: 'Business A',
-          merchant: 'Business A',
-          amount: -1184.50,
-          type: 'EXPENSE',
-          category: 'Inventory Order',
-          date: 'Oct 24, 2023',
-          time: '2:45 PM',
-          note: 'Inventory Order',
-          businessName: 'Business A',
-        },
-        {
-          id: '2',
-          title: 'Tech Solutions LLC',
-          merchant: 'Tech Solutions LLC',
-          amount: -245.00,
-          type: 'EXPENSE',
-          category: 'Software',
-          date: 'Yesterday',
-          time: '10:15 AM',
-          note: 'SaaS Subscription',
-          businessName: 'Tech Solutions LLC',
-        },
-        {
-          id: '3',
-          title: 'Vertex Agency',
-          merchant: 'Vertex Agency',
-          amount: 8550.00,
-          type: 'INCOME',
-          category: 'Services',
-          date: 'Oct 24',
-          time: '09:00 AM',
-          note: 'Service Payout',
-          businessName: 'Vertex Agency',
-        },
-      ],
-    });
+    console.error('getOverview error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch overview metrics' });
   }
 };
