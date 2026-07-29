@@ -7,10 +7,17 @@ const userController_1 = require("./userController");
 const getAccounts = async (req, res) => {
     try {
         const userId = (0, userController_1.resolveRequestUserId)(req);
-        const accounts = await db_1.prisma.account.findMany({
+        let accounts = await db_1.prisma.account.findMany({
             where: { userId },
             orderBy: { createdAt: 'desc' },
         });
+        if (accounts.length === 0) {
+            await (0, userController_1.seedDefaultDataForUser)(userId);
+            accounts = await db_1.prisma.account.findMany({
+                where: { userId },
+                orderBy: { createdAt: 'desc' },
+            });
+        }
         const totalBalance = accounts.reduce((sum, a) => sum + a.balance, 0);
         res.json({ success: true, totalBalance, data: accounts });
     }

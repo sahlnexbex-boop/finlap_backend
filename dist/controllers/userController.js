@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.verifyToken = exports.logoutUser = exports.registerUser = exports.loginUser = exports.updateUserSettings = exports.uploadAvatar = exports.getUserProfile = void 0;
+exports.deleteUserAccount = exports.verifyToken = exports.logoutUser = exports.registerUser = exports.loginUser = exports.updateUserSettings = exports.uploadAvatar = exports.getUserProfile = exports.seedDefaultDataForUser = void 0;
 exports.resolveRequestUserId = resolveRequestUserId;
 const db_1 = require("../db");
 const crypto_1 = __importDefault(require("crypto"));
@@ -25,7 +25,7 @@ const defaultJulian = {
     name: 'Julian Sterling',
     email: 'julian.sterling@finlap.io',
     password: 'password123',
-    currency: 'USD',
+    currency: 'INR',
     memberTier: 'Platinum Member',
     proBadge: true,
     biometrics: true,
@@ -45,7 +45,7 @@ const toStoredUser = (user, password) => ({
     sex: user.sex ?? undefined,
     place: user.place ?? undefined,
     phone: user.phone ?? undefined,
-    currency: user.currency || 'USD',
+    currency: user.currency || 'INR',
     memberTier: user.memberTier || 'Platinum Member',
     proBadge: user.proBadge ?? true,
     biometrics: user.biometrics ?? true,
@@ -54,11 +54,106 @@ const toStoredUser = (user, password) => ({
     theme: user.theme || 'Midnight Slate',
     language: user.language || 'English (US)',
 });
+const seedDefaultDataForUser = async (userId) => {
+    try {
+        const existingEntities = await db_1.prisma.businessEntity.findMany({ where: { userId } }).catch(() => []);
+        if (existingEntities.length === 0) {
+            await db_1.prisma.businessEntity.create({
+                data: {
+                    userId,
+                    name: 'Personal',
+                    subtitle: 'Personal Account',
+                    isPrimary: true,
+                },
+            }).catch(() => null);
+        }
+        const existingCategories = await db_1.prisma.category.findMany({ where: { userId } }).catch(() => []);
+        if (existingCategories.length === 0) {
+            const defaultCategories = [
+                { name: 'Food', icon: 'utensils', color: '#8B5CF6' },
+                { name: 'Bills', icon: 'zap', color: '#3B82F6' },
+                { name: 'Travel', icon: 'plane', color: '#10B981' },
+                { name: 'Other', icon: 'tag', color: '#F59E0B' },
+            ];
+            for (const cat of defaultCategories) {
+                await db_1.prisma.category.create({
+                    data: {
+                        userId,
+                        name: cat.name,
+                        icon: cat.icon,
+                        color: cat.color,
+                    },
+                }).catch(() => null);
+            }
+        }
+        const existingAccounts = await db_1.prisma.account.findMany({ where: { userId } }).catch(() => []);
+        if (existingAccounts.length === 0) {
+            await db_1.prisma.account.create({
+                data: {
+                    userId,
+                    name: 'Cash',
+                    type: 'cash',
+                    balance: 0,
+                    icon: 'wallet',
+                    color: '#10B981',
+                },
+            }).catch(() => null);
+        }
+    }
+    catch (err) {
+        console.error('Error seeding default data for user:', err);
+    }
+};
+exports.seedDefaultDataForUser = seedDefaultDataForUser;
 const issueSession = (userId) => {
     const token = `finlap_token_${crypto_1.default.randomUUID()}`;
     const expiresAt = Date.now() + ONE_MONTH_MS;
     tokenSessions.set(token, userId);
     return { token, expiresAt };
+};
+const userSelect = {
+    id: true,
+    name: true,
+    email: true,
+    avatarUrl: true,
+    country: true,
+    sex: true,
+    place: true,
+    phone: true,
+    currency: true,
+    memberTier: true,
+    proBadge: true,
+    biometrics: true,
+    notifications: true,
+    securityPin: true,
+    theme: true,
+    language: true,
+    createdAt: true,
+    updatedAt: true,
+};
+const getStoredPassword = async (email) => {
+    try {
+        const rows = await db_1.prisma.$queryRaw `
+      SELECT "password"
+      FROM "User"
+      WHERE "email" = ${email}
+      LIMIT 1
+    `;
+        return rows[0]?.password || undefined;
+    }
+    catch {
+        return undefined;
+    }
+};
+const saveStoredPassword = async (userId, password) => {
+    try {
+        await db_1.prisma.$executeRaw `
+      UPDATE "User"
+      SET "password" = ${password}
+      WHERE "id" = ${userId}
+    `;
+    }
+    catch { }
 };
 function resolveRequestUserId(req) {
     const authHeader = req.headers.authorization;
@@ -100,6 +195,7 @@ const getUserProfile = async (req, res) => {
         const activeUser = getUserByToken(req);
         let prismaUser = await db_1.prisma.user.findUnique({
             where: { id: userId },
+            select: userSelect,
         }).catch(() => null);
         const userData = prismaUser || (activeUser.id === userId ? activeUser : null);
         if (!userData) {
@@ -147,7 +243,7 @@ const updateUserSettings = async (req, res) => {
         const userId = resolveRequestUserId(req);
         let activeUser = getUserByToken(req);
         if (activeUser.id !== userId) {
-            const prismaUser = await db_1.prisma.user.findUnique({ where: { id: userId } }).catch(() => null);
+            const prismaUser = await db_1.prisma.user.findUnique({ where: { id: userId }, select: userSelect }).catch(() => null);
             if (!prismaUser) {
                 return res.status(404).json({ success: false, error: 'User not found' });
             }
@@ -182,7 +278,7 @@ const updateUserSettings = async (req, res) => {
             activeUser.avatarUrl = cleanedAvatar;
         usersDb.set(activeUser.email.toLowerCase(), activeUser);
         try {
-            let user = await db_1.prisma.user.findUnique({ where: { id: activeUser.id } });
+            let user = await db_1.prisma.user.findUnique({ where: { id: activeUser.id }, select: userSelect });
             if (user) {
                 user = await db_1.prisma.user.update({
                     where: { id: user.id },
@@ -200,6 +296,7 @@ const updateUserSettings = async (req, res) => {
                         ...(phone !== undefined && { phone }),
                         ...(avatarUrl !== undefined && { avatarUrl: cleanedAvatar }),
                     },
+                    select: userSelect,
                 });
             }
         }
@@ -223,24 +320,28 @@ const loginUser = async (req, res) => {
         const normalizedEmail = email.trim().toLowerCase();
         let user = usersDb.get(normalizedEmail);
         if (!user) {
-            const dbUser = await db_1.prisma.user.findUnique({ where: { email: normalizedEmail } }).catch(() => null);
+            const dbUser = await db_1.prisma.user.findUnique({
+                where: { email: normalizedEmail },
+                select: userSelect,
+            }).catch(() => null);
             if (dbUser) {
-                user = toStoredUser(dbUser);
+                user = toStoredUser(dbUser, await getStoredPassword(normalizedEmail));
                 usersDb.set(normalizedEmail, user);
             }
         }
         if (!user) {
             return res.status(400).json({
                 success: false,
-                message: 'Invalid email or password',
+                message: 'User not found!',
             });
         }
         if (user.password && user.password !== password) {
             return res.status(400).json({
                 success: false,
-                message: 'Invalid email or password',
+                message: 'Invalid Password!',
             });
         }
+        await (0, exports.seedDefaultDataForUser)(user.id);
         const { token, expiresAt } = issueSession(user.id);
         const { password: _, ...userWithoutPassword } = user;
         res.json({
@@ -275,6 +376,16 @@ const registerUser = async (req, res) => {
                 message: 'An account with this email already exists',
             });
         }
+        const existingDbUser = await db_1.prisma.user.findUnique({
+            where: { email: normalizedEmail },
+            select: userSelect,
+        }).catch(() => null);
+        if (existingDbUser) {
+            return res.status(400).json({
+                success: false,
+                message: 'An account with this email already exists',
+            });
+        }
         const cleanedAvatar = cleanAvatarUrl(avatarUrl);
         let newUser;
         try {
@@ -282,13 +393,12 @@ const registerUser = async (req, res) => {
                 data: {
                     name: name.trim(),
                     email: normalizedEmail,
-                    password,
                     avatarUrl: cleanedAvatar,
                     country: country || undefined,
                     sex: sex || undefined,
                     place: place || undefined,
                     phone: phone || undefined,
-                    currency: 'USD',
+                    currency: 'INR',
                     memberTier: 'Platinum Member',
                     proBadge: true,
                     biometrics: true,
@@ -297,7 +407,9 @@ const registerUser = async (req, res) => {
                     theme: 'Midnight Slate',
                     language: 'English (US)',
                 },
+                select: userSelect,
             });
+            await saveStoredPassword(createdUser.id, password);
             newUser = toStoredUser(createdUser, password);
         }
         catch (e) {
@@ -311,7 +423,7 @@ const registerUser = async (req, res) => {
                 sex: sex || undefined,
                 place: place || undefined,
                 phone: phone || undefined,
-                currency: 'USD',
+                currency: 'INR',
                 memberTier: 'Platinum Member',
                 proBadge: true,
                 biometrics: true,
@@ -322,6 +434,7 @@ const registerUser = async (req, res) => {
             };
         }
         usersDb.set(normalizedEmail, newUser);
+        await (0, exports.seedDefaultDataForUser)(newUser.id);
         const { token, expiresAt } = issueSession(newUser.id);
         const { password: _, ...userWithoutPassword } = newUser;
         res.json({
@@ -374,3 +487,40 @@ const verifyToken = async (req, res) => {
     });
 };
 exports.verifyToken = verifyToken;
+const deleteUserAccount = async (req, res) => {
+    try {
+        const userId = resolveRequestUserId(req);
+        const activeUser = getUserByToken(req);
+        try {
+            await db_1.prisma.transaction.deleteMany({ where: { userId } });
+            await db_1.prisma.businessEntity.deleteMany({ where: { userId } });
+            await db_1.prisma.account.deleteMany({ where: { userId } });
+            await db_1.prisma.category.deleteMany({ where: { userId } });
+            await db_1.prisma.wallet.deleteMany({ where: { userId } });
+            await db_1.prisma.budget.deleteMany({ where: { userId } });
+            await db_1.prisma.goal.deleteMany({ where: { userId } });
+            await db_1.prisma.netWorthHistory.deleteMany({ where: { userId } });
+            await db_1.prisma.user.deleteMany({ where: { id: userId } });
+        }
+        catch (e) {
+            console.warn('Prisma account delete warning:', e);
+        }
+        if (activeUser?.email) {
+            usersDb.delete(activeUser.email.toLowerCase());
+        }
+        for (const [token, uid] of Array.from(tokenSessions.entries())) {
+            if (uid === userId) {
+                tokenSessions.delete(token);
+            }
+        }
+        res.json({
+            success: true,
+            message: 'Account and all associated user data deleted successfully',
+        });
+    }
+    catch (error) {
+        console.error('deleteUserAccount error:', error);
+        res.status(500).json({ success: false, error: 'Failed to delete account' });
+    }
+};
+exports.deleteUserAccount = deleteUserAccount;

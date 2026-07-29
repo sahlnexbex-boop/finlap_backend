@@ -36,10 +36,30 @@ const transactionSummarySelect = {
     icon: true,
     createdAt: true,
 };
+const userSelect = {
+    id: true,
+    name: true,
+    email: true,
+    avatarUrl: true,
+    country: true,
+    sex: true,
+    place: true,
+    phone: true,
+    currency: true,
+    memberTier: true,
+    proBadge: true,
+    biometrics: true,
+    notifications: true,
+    securityPin: true,
+    theme: true,
+    language: true,
+    createdAt: true,
+    updatedAt: true,
+};
 const getOverview = async (req, res) => {
     try {
         const userId = (0, userController_1.resolveRequestUserId)(req);
-        let user = await db_1.prisma.user.findUnique({ where: { id: userId } }).catch(() => null);
+        let user = await db_1.prisma.user.findUnique({ where: { id: userId }, select: userSelect }).catch(() => null);
         if (!user) {
             const fallbackEmail = buildFallbackUserEmail(userId);
             user = await db_1.prisma.user
@@ -48,7 +68,7 @@ const getOverview = async (req, res) => {
                     id: userId,
                     name: 'FinLap User',
                     email: fallbackEmail,
-                    currency: 'USD',
+                    currency: 'INR',
                     memberTier: 'Platinum Member',
                     proBadge: true,
                     biometrics: true,
@@ -58,7 +78,7 @@ const getOverview = async (req, res) => {
             })
                 .catch(async (error) => {
                 if (error?.code === 'P2002') {
-                    return db_1.prisma.user.findUnique({ where: { email: fallbackEmail } });
+                    return db_1.prisma.user.findUnique({ where: { email: fallbackEmail }, select: userSelect });
                 }
                 throw error;
             });

@@ -7,11 +7,19 @@ const userController_1 = require("./userController");
 const getBusinessEntities = async (req, res) => {
     try {
         const userId = (0, userController_1.resolveRequestUserId)(req);
-        const entities = await db_1.prisma.businessEntity.findMany({
+        let entities = await db_1.prisma.businessEntity.findMany({
             where: { userId },
             orderBy: { createdAt: 'desc' },
             include: { _count: { select: { transactions: true } } },
         });
+        if (entities.length === 0) {
+            await (0, userController_1.seedDefaultDataForUser)(userId);
+            entities = await db_1.prisma.businessEntity.findMany({
+                where: { userId },
+                orderBy: { createdAt: 'desc' },
+                include: { _count: { select: { transactions: true } } },
+            });
+        }
         res.json({ success: true, data: entities });
     }
     catch (error) {

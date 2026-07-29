@@ -7,10 +7,17 @@ const userController_1 = require("./userController");
 const getCategories = async (req, res) => {
     try {
         const userId = (0, userController_1.resolveRequestUserId)(req);
-        const categories = await db_1.prisma.category.findMany({
+        let categories = await db_1.prisma.category.findMany({
             where: { userId },
-            orderBy: { name: 'asc' },
+            orderBy: { createdAt: 'asc' },
         });
+        if (categories.length === 0) {
+            await (0, userController_1.seedDefaultDataForUser)(userId);
+            categories = await db_1.prisma.category.findMany({
+                where: { userId },
+                orderBy: { createdAt: 'asc' },
+            });
+        }
         res.json({ success: true, data: categories });
     }
     catch (error) {

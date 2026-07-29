@@ -36,6 +36,7 @@ router.get('/analytics', analyticsController_1.getAnalytics);
 // User Profile & Settings
 router.get('/user/profile', userController_1.getUserProfile);
 router.put('/user/settings', userController_1.updateUserSettings);
+router.delete('/user/account', userController_1.deleteUserAccount);
 // Business Entities
 router.get('/business-entities', businessEntityController_1.getBusinessEntities);
 router.post('/business-entities', businessEntityController_1.createBusinessEntity);

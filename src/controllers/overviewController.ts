@@ -74,7 +74,7 @@ export const getOverview = async (req: Request, res: Response) => {
             id: userId,
             name: 'FinLap User',
             email: fallbackEmail,
-            currency: 'USD',
+            currency: 'INR',
             memberTier: 'Platinum Member',
             proBadge: true,
             biometrics: true,

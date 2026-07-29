@@ -1,15 +1,22 @@
 import { Request, Response } from 'express';
 import { prisma } from '../db';
-import { resolveRequestUserId } from './userController';
+import { resolveRequestUserId, seedDefaultDataForUser } from './userController';
 
 // GET /api/categories
 export const getCategories = async (req: Request, res: Response) => {
   try {
     const userId = resolveRequestUserId(req);
-    const categories = await prisma.category.findMany({
+    let categories = await prisma.category.findMany({
       where: { userId },
-      orderBy: { name: 'asc' },
+      orderBy: { createdAt: 'asc' },
     });
+    if (categories.length === 0) {
+      await seedDefaultDataForUser(userId);
+      categories = await prisma.category.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'asc' },
+      });
+    }
     res.json({ success: true, data: categories });
   } catch (error) {
     console.error('getCategories error:', error);

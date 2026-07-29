@@ -1,15 +1,22 @@
 import { Request, Response } from 'express';
 import { prisma } from '../db';
-import { resolveRequestUserId } from './userController';
+import { resolveRequestUserId, seedDefaultDataForUser } from './userController';
 
 // GET /api/accounts
 export const getAccounts = async (req: Request, res: Response) => {
   try {
     const userId = resolveRequestUserId(req);
-    const accounts = await prisma.account.findMany({
+    let accounts = await prisma.account.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' },
     });
+    if (accounts.length === 0) {
+      await seedDefaultDataForUser(userId);
+      accounts = await prisma.account.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+      });
+    }
     const totalBalance = accounts.reduce((sum, a) => sum + a.balance, 0);
     res.json({ success: true, totalBalance, data: accounts });
   } catch (error) {

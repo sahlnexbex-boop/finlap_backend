@@ -17,7 +17,7 @@ model User {
   sex           String?
   place         String?
   phone         String?
-  currency      String   @default("USD")
+  currency      String   @default("INR")
   memberTier    String   @default("Platinum Member")
   proBadge      Boolean  @default(true)
   biometrics    Boolean  @default(true)
@@ -71,7 +71,7 @@ model Wallet {
   type        String
   accountNo   String
   balance     Float
-  currency    String   @default("USD")
+  currency    String   @default("INR")
   cardHolder  String
   expiry      String
   cardType    String

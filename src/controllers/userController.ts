@@ -45,7 +45,7 @@ const defaultJulian: StoredUser = {
   name: 'Julian Sterling',
   email: 'julian.sterling@finlap.io',
   password: 'password123',
-  currency: 'USD',
+  currency: 'INR',
   memberTier: 'Platinum Member',
   proBadge: true,
   biometrics: true,
@@ -67,7 +67,7 @@ const toStoredUser = (user: any, password?: string): StoredUser => ({
   sex: user.sex ?? undefined,
   place: user.place ?? undefined,
   phone: user.phone ?? undefined,
-  currency: user.currency || 'USD',
+  currency: user.currency || 'INR',
   memberTier: user.memberTier || 'Platinum Member',
   proBadge: user.proBadge ?? true,
   biometrics: user.biometrics ?? true,
@@ -76,6 +76,58 @@ const toStoredUser = (user: any, password?: string): StoredUser => ({
   theme: user.theme || 'Midnight Slate',
   language: user.language || 'English (US)',
 });
+
+export const seedDefaultDataForUser = async (userId: string) => {
+  try {
+    const existingEntities = await prisma.businessEntity.findMany({ where: { userId } }).catch(() => []);
+    if (existingEntities.length === 0) {
+      await prisma.businessEntity.create({
+        data: {
+          userId,
+          name: 'Personal',
+          subtitle: 'Personal Account',
+          isPrimary: true,
+        },
+      }).catch(() => null);
+    }
+
+    const existingCategories = await prisma.category.findMany({ where: { userId } }).catch(() => []);
+    if (existingCategories.length === 0) {
+      const defaultCategories = [
+        { name: 'Food', icon: 'utensils', color: '#8B5CF6' },
+        { name: 'Bills', icon: 'zap', color: '#3B82F6' },
+        { name: 'Travel', icon: 'plane', color: '#10B981' },
+        { name: 'Other', icon: 'tag', color: '#F59E0B' },
+      ];
+      for (const cat of defaultCategories) {
+        await prisma.category.create({
+          data: {
+            userId,
+            name: cat.name,
+            icon: cat.icon,
+            color: cat.color,
+          },
+        }).catch(() => null);
+      }
+    }
+
+    const existingAccounts = await prisma.account.findMany({ where: { userId } }).catch(() => []);
+    if (existingAccounts.length === 0) {
+      await prisma.account.create({
+        data: {
+          userId,
+          name: 'Cash',
+          type: 'cash',
+          balance: 0,
+          icon: 'wallet',
+          color: '#10B981',
+        },
+      }).catch(() => null);
+    }
+  } catch (err) {
+    console.error('Error seeding default data for user:', err);
+  }
+};
 
 const issueSession = (userId: string) => {
   const token = `finlap_token_${crypto.randomUUID()}`;
@@ -307,16 +359,18 @@ export const loginUser = async (req: Request, res: Response) => {
     if (!user) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid email or password',
+        message: 'User not found!',
       });
     }
 
     if (user.password && user.password !== password) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid email or password',
+        message: 'Invalid Password!',
       });
     }
+
+    await seedDefaultDataForUser(user.id);
 
     const { token, expiresAt } = issueSession(user.id);
 
@@ -382,7 +436,7 @@ export const registerUser = async (req: Request, res: Response) => {
           sex: sex || undefined,
           place: place || undefined,
           phone: phone || undefined,
-          currency: 'USD',
+          currency: 'INR',
           memberTier: 'Platinum Member',
           proBadge: true,
           biometrics: true,
@@ -406,7 +460,7 @@ export const registerUser = async (req: Request, res: Response) => {
         sex: sex || undefined,
         place: place || undefined,
         phone: phone || undefined,
-        currency: 'USD',
+        currency: 'INR',
         memberTier: 'Platinum Member',
         proBadge: true,
         biometrics: true,
@@ -418,6 +472,8 @@ export const registerUser = async (req: Request, res: Response) => {
     }
 
     usersDb.set(normalizedEmail, newUser);
+
+    await seedDefaultDataForUser(newUser.id);
 
     const { token, expiresAt } = issueSession(newUser.id);
 
@@ -474,4 +530,43 @@ export const verifyToken = async (req: Request, res: Response) => {
     message: 'Token is valid',
     user: userWithoutPassword,
   });
+};
+
+export const deleteUserAccount = async (req: Request, res: Response) => {
+  try {
+    const userId = resolveRequestUserId(req);
+    const activeUser = getUserByToken(req);
+
+    try {
+      await prisma.transaction.deleteMany({ where: { userId } });
+      await prisma.businessEntity.deleteMany({ where: { userId } });
+      await prisma.account.deleteMany({ where: { userId } });
+      await prisma.category.deleteMany({ where: { userId } });
+      await prisma.wallet.deleteMany({ where: { userId } });
+      await prisma.budget.deleteMany({ where: { userId } });
+      await prisma.goal.deleteMany({ where: { userId } });
+      await prisma.netWorthHistory.deleteMany({ where: { userId } });
+      await prisma.user.deleteMany({ where: { id: userId } });
+    } catch (e) {
+      console.warn('Prisma account delete warning:', e);
+    }
+
+    if (activeUser?.email) {
+      usersDb.delete(activeUser.email.toLowerCase());
+    }
+
+    for (const [token, uid] of Array.from(tokenSessions.entries())) {
+      if (uid === userId) {
+        tokenSessions.delete(token);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: 'Account and all associated user data deleted successfully',
+    });
+  } catch (error) {
+    console.error('deleteUserAccount error:', error);
+    res.status(500).json({ success: false, error: 'Failed to delete account' });
+  }
 };

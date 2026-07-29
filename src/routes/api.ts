@@ -18,6 +18,7 @@ import {
   logoutUser,
   verifyToken,
   uploadAvatar,
+  deleteUserAccount,
 } from '../controllers/userController';
 import {
   getBusinessEntities,
@@ -71,6 +72,7 @@ router.get('/analytics', getAnalytics);
 // User Profile & Settings
 router.get('/user/profile', getUserProfile);
 router.put('/user/settings', updateUserSettings);
+router.delete('/user/account', deleteUserAccount);
 
 // Business Entities
 router.get('/business-entities', getBusinessEntities);

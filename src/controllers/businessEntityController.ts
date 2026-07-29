@@ -1,16 +1,24 @@
 import { Request, Response } from 'express';
 import { prisma } from '../db';
-import { resolveRequestUserId } from './userController';
+import { resolveRequestUserId, seedDefaultDataForUser } from './userController';
 
 // GET /api/business-entities
 export const getBusinessEntities = async (req: Request, res: Response) => {
   try {
     const userId = resolveRequestUserId(req);
-    const entities = await prisma.businessEntity.findMany({
+    let entities = await prisma.businessEntity.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' },
       include: { _count: { select: { transactions: true } } },
     });
+    if (entities.length === 0) {
+      await seedDefaultDataForUser(userId);
+      entities = await prisma.businessEntity.findMany({
+        where: { userId },
+        orderBy: { createdAt: 'desc' },
+        include: { _count: { select: { transactions: true } } },
+      });
+    }
     res.json({ success: true, data: entities });
   } catch (error) {
     console.error('getBusinessEntities error:', error);
