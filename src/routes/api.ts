@@ -3,10 +3,12 @@ import { getOverview } from '../controllers/overviewController';
 import {
   getTransactions,
   createTransaction,
+  updateTransaction,
   deleteTransaction,
   uploadTransactionAttachment,
   transactionAttachmentUpload,
 } from '../controllers/transactionController';
+import { getReport, exportReport } from '../controllers/reportController';
 import { getBudgets, updateBudget, createGoal } from '../controllers/budgetController';
 import { getWallets, createWallet } from '../controllers/walletController';
 import { getAnalytics } from '../controllers/analyticsController';
@@ -54,8 +56,13 @@ router.get('/overview', getOverview);
 // Transactions
 router.get('/transactions', getTransactions);
 router.post('/transactions', transactionAttachmentUpload.single('attachment'), createTransaction);
+router.put('/transactions/:id', transactionAttachmentUpload.single('attachment'), updateTransaction);
 router.post('/transactions/upload-attachment', uploadTransactionAttachment);
 router.delete('/transactions/:id', deleteTransaction);
+
+// Reports
+router.get('/reports', getReport);
+router.get('/reports/export', exportReport);
 
 // Budgets & Goals
 router.get('/budgets', getBudgets);

@@ -65,6 +65,11 @@ export const getOverview = async (req: Request, res: Response) => {
   try {
     const userId = resolveRequestUserId(req);
 
+    // Parse optional filter query params
+    const filterMonth = req.query.month ? String(req.query.month) : undefined; // e.g. "2026-07"
+    const filterEntityId = req.query.entityId ? String(req.query.entityId) : undefined;
+    const filterAccountId = req.query.accountId ? String(req.query.accountId) : undefined;
+
     let user = await prisma.user.findUnique({ where: { id: userId }, select: userSelect }).catch(() => null);
     if (!user) {
       const fallbackEmail = buildFallbackUserEmail(userId);
@@ -94,13 +99,37 @@ export const getOverview = async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, error: 'User not found' });
     }
 
+    // Build where clause for transactions
+    const txWhere: any = { userId };
+    if (filterEntityId && filterEntityId !== 'ALL') {
+      txWhere.businessEntityId = filterEntityId;
+    }
+    if (filterAccountId && filterAccountId !== 'ALL') {
+      txWhere.OR = [
+        { fundingSource: filterAccountId },
+        { walletName: filterAccountId },
+      ];
+    }
+
     const userTransactions = await prisma.transaction.findMany({
-      where: { userId },
+      where: txWhere,
       orderBy: { createdAt: 'desc' },
       select: transactionSummarySelect,
     });
 
-    const allTx = userTransactions;
+    // Apply month filter in JS (since date is stored as string)
+    let allTx = userTransactions;
+    if (filterMonth && filterMonth !== 'ALL') {
+      allTx = allTx.filter((t) => {
+        try {
+          const d = new Date(t.date);
+          const txMonth = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+          return txMonth === filterMonth;
+        } catch {
+          return true;
+        }
+      });
+    }
 
     const totalIncomeAmount = allTx
       .filter(isIncomeTransaction)
@@ -113,20 +142,61 @@ export const getOverview = async (req: Request, res: Response) => {
     const growthPercent =
       totalIncomeAmount > 0 ? Math.round((totalTransactionAmount / totalIncomeAmount) * 100 * 10) / 10 : 0;
 
+    // Build real weekly analytics from actual transactions (current week)
+    const now = new Date();
+    const dayOfWeek = (now.getDay() + 6) % 7; // Mon=0..Sun=6
+    const mondayStart = new Date(now);
+    mondayStart.setDate(now.getDate() - dayOfWeek);
+    mondayStart.setHours(0, 0, 0, 0);
+
     const dayNames = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
-    const currentDayIndex = (new Date().getDay() + 6) % 7; // Mon=0 .. Sun=6
-    const baseVals = [40, 65, 50, 85, 45, 75, 90];
     const weeklyAnalytics = dayNames.map((day, idx) => {
+      const dayDate = new Date(mondayStart);
+      dayDate.setDate(mondayStart.getDate() + idx);
+      const dayStr = dayDate.toISOString().split('T')[0]; // "YYYY-MM-DD"
+
+      const dayTransactions = allTx.filter((t) => {
+        try {
+          const txDate = new Date(t.date);
+          return txDate.toISOString().split('T')[0] === dayStr;
+        } catch {
+          return false;
+        }
+      });
+
+      const dayIncome = dayTransactions
+        .filter(isIncomeTransaction)
+        .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+      const dayExpense = dayTransactions
+        .filter((t) => !isIncomeTransaction(t))
+        .reduce((sum, t) => sum + Math.abs(t.amount), 0);
+
       return {
         day,
-        val: baseVals[idx],
-        active: idx === currentDayIndex,
+        income: dayIncome,
+        expense: dayExpense,
+        active: idx === dayOfWeek,
       };
     });
 
     const businessEntities = await prisma.businessEntity.findMany({
       where: { userId },
     });
+
+    const accounts = await prisma.account.findMany({
+      where: { userId },
+    });
+
+    // Build available months from transactions for month picker
+    const monthSet = new Set<string>();
+    userTransactions.forEach((t) => {
+      try {
+        const d = new Date(t.date);
+        const m = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        monthSet.add(m);
+      } catch {}
+    });
+    const availableMonths = Array.from(monthSet).sort().reverse();
 
     res.json({
       user,
@@ -140,6 +210,8 @@ export const getOverview = async (req: Request, res: Response) => {
       weeklyAnalytics,
       recentTransactions: allTx.slice(0, 10),
       businessEntities,
+      accounts,
+      availableMonths,
     });
   } catch (error) {
     console.error('getOverview error:', error);

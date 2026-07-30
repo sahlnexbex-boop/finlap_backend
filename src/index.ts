@@ -1,12 +1,13 @@
+import dotenv from 'dotenv';
+// Load .env as early as possible so modules that initialize on import
+// (for example Prisma client) can read the DATABASE_URL value.
+dotenv.config();
+
 import express from 'express';
 import cors from 'cors';
-import dotenv from 'dotenv';
 import apiRouter from './routes/api';
 import { prisma } from './db';
-
 import path from 'path';
-
-dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -42,12 +43,9 @@ app.listen(Number(PORT), '0.0.0.0', async () => {
   } catch (error: any) {
     dbStatus = `CONNECTION ERROR: ${error?.message || error}`;
   }
-
-  console.log(`=================================================`);
-  console.log(` FinLap Backend API Service is running on port ${PORT}`);
-  console.log(` Database Status: ${dbStatus}`);
-  console.log(` Local API:       http://localhost:${PORT}/api`);
-  console.log(` Network API:     http://192.168.29.2:${PORT}/api`);
-  console.log(`=================================================`);
+  
+  // Log server and database status
+  console.log(`Server is running on port ${PORT}`);
+  console.log(`Database status: ${dbStatus}`);
 });
 
