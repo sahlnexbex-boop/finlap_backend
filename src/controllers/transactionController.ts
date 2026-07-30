@@ -292,18 +292,6 @@ export const createTransaction = async (req: Request, res: Response) => {
       });
     }
 
-    // Sync budget spent
-    const catName = selectedCategory?.name || category;
-    if (finalType === TRANSACTION_TYPE.EXPENSE && catName) {
-      const budget = await prisma.budget.findFirst({ where: { userId, category: catName } as any });
-      if (budget) {
-        await prisma.budget.update({
-          where: { id: budget.id },
-          data: { spent: Math.max(0, budget.spent + Math.abs(numericAmount)) },
-        });
-      }
-    }
-
     res.status(201).json({ success: true, data: { ...transaction, attachment: attachmentPath } });
   } catch (error) {
     console.error('Failed to create transaction:', error);
@@ -363,17 +351,6 @@ export const deleteTransaction = async (req: Request, res: Response) => {
       }
     }
 
-    // Revert budget spent if applicable
-    if (normalizeTransactionType(existing.type, existing.amount) === TRANSACTION_TYPE.EXPENSE && existing.category) {
-      const budget = await prisma.budget.findFirst({ where: { userId, category: existing.category } as any });
-      if (budget) {
-        await prisma.budget.update({
-          where: { id: budget.id },
-          data: { spent: Math.max(0, budget.spent - Math.abs(existing.amount)) },
-        });
-      }
-    }
-
     await prisma.transaction.delete({ where: { id } });
     res.json({ success: true, message: 'Transaction deleted' });
   } catch (error) {
@@ -419,17 +396,6 @@ export const updateTransaction = async (req: Request, res: Response) => {
         await prisma.account.update({
           where: { id: prevAccount.id },
           data: { balance: prevAccount.balance - existing.amount },
-        });
-      }
-    }
-
-    // Revert previous budget impact
-    if (normalizeTransactionType(existing.type, existing.amount) === TRANSACTION_TYPE.EXPENSE && existing.category) {
-      const prevBudget = await prisma.budget.findFirst({ where: { userId, category: existing.category } as any });
-      if (prevBudget) {
-        await prisma.budget.update({
-          where: { id: prevBudget.id },
-          data: { spent: Math.max(0, prevBudget.spent - Math.abs(existing.amount)) },
         });
       }
     }
@@ -487,18 +453,6 @@ export const updateTransaction = async (req: Request, res: Response) => {
         where: { id: newAccount.id },
         data: { balance: newAccount.balance + finalAmount },
       });
-    }
-
-    // Apply new budget impact
-    const finalCatName = category || existing.category;
-    if (finalType === TRANSACTION_TYPE.EXPENSE && finalCatName) {
-      const newBudget = await prisma.budget.findFirst({ where: { userId, category: finalCatName } as any });
-      if (newBudget) {
-        await prisma.budget.update({
-          where: { id: newBudget.id },
-          data: { spent: Math.max(0, newBudget.spent + Math.abs(numericAmount)) },
-        });
-      }
     }
 
     res.json({ success: true, data: { ...updated, attachment: attachmentPath } });

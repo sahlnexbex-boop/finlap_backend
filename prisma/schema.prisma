@@ -65,22 +65,6 @@ model Category {
   @@unique([userId, name])
 }
 
-model Wallet {
-  id          String   @id @default(uuid())
-  userId      String
-  name        String
-  type        String
-  accountNo   String
-  balance     Float
-  currency    String   @default("INR")
-  cardHolder  String
-  expiry      String
-  cardType    String
-  colorAccent String
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-}
-
 model Transaction {
   id               String          @id @default(uuid())
   userId           String
@@ -103,41 +87,4 @@ model Transaction {
   attachment       String?
   icon             String          @default("building")
   createdAt        DateTime        @default(now())
-}
-
-model Budget {
-  id        String   @id @default(uuid())
-  userId    String
-  category  String
-  limit     Float
-  spent     Float    @default(0.0)
-  icon      String
-  color     String
-  period    String   @default("MONTHLY")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  @@unique([userId, category])
-}
-
-model Goal {
-  id         String   @id @default(uuid())
-  userId     String
-  title      String
-  target     Float
-  current    Float
-  category   String
-  targetDate String
-  color      String
-  createdAt  DateTime @default(now())
-}
-
-model NetWorthHistory {
-  id          String   @id @default(uuid())
-  userId      String
-  month       String
-  netWorth    Float
-  assets      Float
-  liabilities Float
-  createdAt   DateTime @default(now())
 }

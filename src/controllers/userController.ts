@@ -3,6 +3,7 @@ import { prisma } from '../db';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
+import bcrypt from 'bcryptjs';
 
 const ONE_MONTH_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -363,11 +364,26 @@ export const loginUser = async (req: Request, res: Response) => {
       });
     }
 
-    if (user.password && user.password !== password) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid Password!',
-      });
+    if (user.password) {
+      const isBcrypt = user.password.startsWith('$2a$') || user.password.startsWith('$2b$');
+      const isMatch = isBcrypt
+        ? await bcrypt.compare(password, user.password)
+        : user.password === password;
+
+      if (!isMatch) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid Password!',
+        });
+      }
+
+      // Upgrade plain text password to hashed password if needed
+      if (!isBcrypt) {
+        const newHash = await bcrypt.hash(password, 10);
+        user.password = newHash;
+        usersDb.set(normalizedEmail, user);
+        await saveStoredPassword(user.id, newHash);
+      }
     }
 
     await seedDefaultDataForUser(user.id);
@@ -423,6 +439,7 @@ export const registerUser = async (req: Request, res: Response) => {
     }
 
     const cleanedAvatar = cleanAvatarUrl(avatarUrl);
+    const hashedPassword = await bcrypt.hash(password, 10);
 
     let newUser: StoredUser;
 
@@ -447,14 +464,14 @@ export const registerUser = async (req: Request, res: Response) => {
         } as any,
         select: userSelect,
       });
-      await saveStoredPassword(createdUser.id, password);
-      newUser = toStoredUser(createdUser, password);
+      await saveStoredPassword(createdUser.id, hashedPassword);
+      newUser = toStoredUser(createdUser, hashedPassword);
     } catch (e) {
       newUser = {
         id: crypto.randomUUID(),
         name: name.trim(),
         email: normalizedEmail,
-        password,
+        password: hashedPassword,
         avatarUrl: cleanedAvatar,
         country: country || undefined,
         sex: sex || undefined,
@@ -542,10 +559,6 @@ export const deleteUserAccount = async (req: Request, res: Response) => {
       await prisma.businessEntity.deleteMany({ where: { userId } });
       await prisma.account.deleteMany({ where: { userId } });
       await prisma.category.deleteMany({ where: { userId } });
-      await prisma.wallet.deleteMany({ where: { userId } });
-      await prisma.budget.deleteMany({ where: { userId } });
-      await prisma.goal.deleteMany({ where: { userId } });
-      await prisma.netWorthHistory.deleteMany({ where: { userId } });
       await prisma.user.deleteMany({ where: { id: userId } });
     } catch (e) {
       console.warn('Prisma account delete warning:', e);

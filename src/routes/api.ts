@@ -9,8 +9,6 @@ import {
   transactionAttachmentUpload,
 } from '../controllers/transactionController';
 import { getReport, exportReport } from '../controllers/reportController';
-import { getBudgets, updateBudget, createGoal } from '../controllers/budgetController';
-import { getWallets, createWallet } from '../controllers/walletController';
 import { getAnalytics } from '../controllers/analyticsController';
 import {
   getUserProfile,
@@ -63,15 +61,6 @@ router.delete('/transactions/:id', deleteTransaction);
 // Reports
 router.get('/reports', getReport);
 router.get('/reports/export', exportReport);
-
-// Budgets & Goals
-router.get('/budgets', getBudgets);
-router.put('/budgets/:id', updateBudget);
-router.post('/goals', createGoal);
-
-// Wallets
-router.get('/wallets', getWallets);
-router.post('/wallets', createWallet);
 
 // Analytics
 router.get('/analytics', getAnalytics);
