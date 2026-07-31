@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import bcrypt from 'bcryptjs';
+import nodemailer from 'nodemailer';
 
 const ONE_MONTH_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -39,6 +40,73 @@ const usersDb = new Map<string, StoredUser>();
 
 // Active sessions map: token -> userId
 const tokenSessions = new Map<string, string>();
+const passwordResetRequests = new Map<string, { otp: string; expiresAt: number }>();
+const passwordResetTokens = new Map<string, { email: string; expiresAt: number }>();
+const PASSWORD_RESET_OTP_TTL = 10 * 60 * 1000;
+const PASSWORD_RESET_TOKEN_TTL = 10 * 60 * 1000;
+
+const cleanupPasswordResetEntries = () => {
+  const now = Date.now();
+  for (const [email, entry] of passwordResetRequests.entries()) {
+    if (entry.expiresAt <= now) {
+      passwordResetRequests.delete(email);
+    }
+  }
+  for (const [token, entry] of passwordResetTokens.entries()) {
+    if (entry.expiresAt <= now) {
+      passwordResetTokens.delete(token);
+    }
+  }
+};
+
+const generateOtp = () => String(1000 + Math.floor(Math.random() * 9000));
+
+const getUserByEmail = async (normalizedEmail: string): Promise<StoredUser | undefined> => {
+  let user = usersDb.get(normalizedEmail);
+  if (!user) {
+    const dbUser = await prisma.user
+      .findUnique({ where: { email: normalizedEmail }, select: userSelect })
+      .catch(() => null);
+    if (dbUser) {
+      user = toStoredUser(dbUser, await getStoredPassword(normalizedEmail));
+      usersDb.set(normalizedEmail, user);
+    }
+  }
+  return user;
+};
+
+const sendPasswordResetEmail = async (toEmail: string, otp: string) => {
+  const from = process.env.EMAIL_USER;
+  const pass = process.env.EMAIL_PASS;
+  if (!from || !pass) {
+    throw new Error('Email transporter is not configured');
+  }
+
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: from,
+      pass,
+    },
+  });
+
+  const mailOptions = {
+    from,
+    to: toEmail,
+    subject: 'FinLap Password Reset Code',
+    text: `Your FinLap password reset code is ${otp}. It expires in 10 minutes.`,
+    html: `
+      <div style="font-family: Arial, sans-serif;">
+        <p>Hi there,</p>
+        <p>Your FinLap password reset code is <strong>${otp}</strong>.</p>
+        <p>This code is valid for 10 minutes.</p>
+        <p>If you did not request a password reset, please ignore this email.</p>
+      </div>
+    `,
+  };
+
+  await transporter.sendMail(mailOptions);
+};
 
 // Seed default users
 const defaultJulian: StoredUser = {
@@ -283,14 +351,31 @@ export const updateUserSettings = async (req: Request, res: Response) => {
       activeUser = { ...prismaUser } as StoredUser;
       usersDb.set(activeUser.email.toLowerCase(), activeUser);
     }
-    const { biometrics, notifications, currency, name, securityPin, theme, language, country, sex, place, phone, avatarUrl } = req.body;
+    const {
+      biometrics,
+      notifications,
+      currency,
+      name,
+      email,
+      securityPin,
+      theme,
+      language,
+      country,
+      sex,
+      place,
+      phone,
+      avatarUrl,
+    } = req.body;
 
     const cleanedAvatar = avatarUrl !== undefined ? cleanAvatarUrl(avatarUrl) : activeUser.avatarUrl;
+    const previousEmail = activeUser.email.toLowerCase();
+    const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : previousEmail;
 
     if (biometrics !== undefined) activeUser.biometrics = biometrics;
     if (notifications !== undefined) activeUser.notifications = notifications;
     if (currency !== undefined) activeUser.currency = currency;
     if (name !== undefined) activeUser.name = name;
+    if (email !== undefined) activeUser.email = normalizedEmail;
     if (securityPin !== undefined) activeUser.securityPin = securityPin;
     if (theme !== undefined) activeUser.theme = theme;
     if (language !== undefined) activeUser.language = language;
@@ -300,7 +385,10 @@ export const updateUserSettings = async (req: Request, res: Response) => {
     if (phone !== undefined) activeUser.phone = phone;
     if (avatarUrl !== undefined) activeUser.avatarUrl = cleanedAvatar;
 
-    usersDb.set(activeUser.email.toLowerCase(), activeUser);
+    if (email !== undefined && normalizedEmail !== previousEmail) {
+      usersDb.delete(previousEmail);
+    }
+    usersDb.set(normalizedEmail, activeUser);
 
     try {
       let user = await prisma.user.findUnique({ where: { id: activeUser.id }, select: userSelect });
@@ -312,6 +400,7 @@ export const updateUserSettings = async (req: Request, res: Response) => {
             ...(notifications !== undefined && { notifications }),
             ...(currency !== undefined && { currency }),
             ...(name !== undefined && { name }),
+            ...(email !== undefined && { email: normalizedEmail }),
             ...(securityPin !== undefined && { securityPin }),
             ...(theme !== undefined && { theme }),
             ...(language !== undefined && { language }),
@@ -323,12 +412,105 @@ export const updateUserSettings = async (req: Request, res: Response) => {
           },
           select: userSelect,
         });
+        if (user) {
+          activeUser = toStoredUser(user, activeUser.password);
+        }
       }
     } catch (e) {}
 
     res.json({ success: true, data: activeUser });
   } catch (error) {
     res.status(500).json({ success: false, error: 'Failed to update settings' });
+  }
+};
+
+export const requestPasswordReset = async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ success: false, message: 'Email is required' });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const user = await getUserByEmail(normalizedEmail);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'Email not found' });
+    }
+
+    cleanupPasswordResetEntries();
+    const otp = generateOtp();
+    passwordResetRequests.set(normalizedEmail, {
+      otp,
+      expiresAt: Date.now() + PASSWORD_RESET_OTP_TTL,
+    });
+
+    await sendPasswordResetEmail(normalizedEmail, otp);
+
+    res.json({ success: true, message: 'OTP sent to email' });
+  } catch (error: any) {
+    console.error('requestPasswordReset error:', error);
+    res.status(500).json({ success: false, message: error.message || 'Failed to send OTP' });
+  }
+};
+
+export const verifyPasswordResetOtp = async (req: Request, res: Response) => {
+  try {
+    const { email, otp } = req.body;
+    if (!email || !otp) {
+      return res.status(400).json({ success: false, message: 'Email and OTP are required' });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+    cleanupPasswordResetEntries();
+    const request = passwordResetRequests.get(normalizedEmail);
+
+    if (!request || request.otp !== String(otp).trim()) {
+      return res.status(400).json({ success: false, message: 'Invalid or expired OTP' });
+    }
+
+    passwordResetRequests.delete(normalizedEmail);
+    const resetToken = `reset_${crypto.randomUUID()}`;
+    passwordResetTokens.set(resetToken, {
+      email: normalizedEmail,
+      expiresAt: Date.now() + PASSWORD_RESET_TOKEN_TTL,
+    });
+
+    res.json({ success: true, message: 'OTP verified', resetToken });
+  } catch (error: any) {
+    console.error('verifyPasswordResetOtp error:', error);
+    res.status(500).json({ success: false, message: error.message || 'Failed to verify OTP' });
+  }
+};
+
+export const resetPassword = async (req: Request, res: Response) => {
+  try {
+    const { token, password } = req.body;
+    if (!token || !password) {
+      return res.status(400).json({ success: false, message: 'Reset token and password are required' });
+    }
+
+    cleanupPasswordResetEntries();
+    const entry = passwordResetTokens.get(String(token));
+    if (!entry) {
+      return res.status(400).json({ success: false, message: 'Invalid or expired reset token' });
+    }
+
+    const normalizedEmail = entry.email;
+    const user = await getUserByEmail(normalizedEmail);
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    const hashedPassword = await bcrypt.hash(String(password), 10);
+    user.password = hashedPassword;
+    usersDb.set(normalizedEmail, user);
+    await saveStoredPassword(user.id, hashedPassword);
+    passwordResetTokens.delete(String(token));
+
+    res.json({ success: true, message: 'Password has been reset successfully' });
+  } catch (error: any) {
+    console.error('resetPassword error:', error);
+    res.status(500).json({ success: false, message: error.message || 'Failed to reset password' });
   }
 };
 

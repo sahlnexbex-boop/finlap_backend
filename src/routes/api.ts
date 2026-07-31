@@ -19,6 +19,9 @@ import {
   verifyToken,
   uploadAvatar,
   deleteUserAccount,
+  requestPasswordReset,
+  verifyPasswordResetOtp,
+  resetPassword,
 } from '../controllers/userController';
 import {
   getBusinessEntities,
@@ -47,6 +50,9 @@ router.post('/auth/register', registerUser);
 router.post('/auth/logout', logoutUser);
 router.get('/auth/verify', verifyToken);
 router.post('/auth/upload-avatar', uploadAvatar);
+router.post('/auth/forgot-password', requestPasswordReset);
+router.post('/auth/forgot-password/verify-otp', verifyPasswordResetOtp);
+router.post('/auth/forgot-password/reset', resetPassword);
 
 // Overview
 router.get('/overview', getOverview);
