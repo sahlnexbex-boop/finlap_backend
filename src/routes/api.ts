@@ -41,6 +41,12 @@ import {
   updateCategory,
   deleteCategory,
 } from '../controllers/categoryController';
+import {
+  getReminders,
+  createReminder,
+  updateReminder,
+  deleteReminder,
+} from '../controllers/reminderController';
 
 const router = Router();
 
@@ -93,5 +99,11 @@ router.get('/categories', getCategories);
 router.post('/categories', createCategory);
 router.put('/categories/:id', updateCategory);
 router.delete('/categories/:id', deleteCategory);
+
+// Reminders
+router.get('/reminders', getReminders);
+router.post('/reminders', createReminder);
+router.put('/reminders/:id', updateReminder);
+router.delete('/reminders/:id', deleteReminder);
 
 export default router;

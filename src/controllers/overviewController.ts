@@ -196,6 +196,14 @@ export const getOverview = async (req: Request, res: Response) => {
         monthSet.add(m);
       } catch {}
     });
+    const upcomingReminders = await (prisma as any).reminder.findMany({
+      where: {
+        userId,
+        status: { in: ['PENDING', 'OVERDUE'] },
+      },
+      orderBy: [{ date: 'asc' }, { time: 'asc' }],
+      take: 3,
+    });
     const availableMonths = Array.from(monthSet).sort().reverse();
 
     res.json({
@@ -212,6 +220,7 @@ export const getOverview = async (req: Request, res: Response) => {
       businessEntities,
       accounts,
       availableMonths,
+      upcomingReminders,
     });
   } catch (error) {
     console.error('getOverview error:', error);

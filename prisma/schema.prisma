@@ -88,3 +88,22 @@ model Transaction {
   icon             String          @default("building")
   createdAt        DateTime        @default(now())
 }
+
+model Reminder {
+  id               String   @id @default(uuid())
+  userId           String
+  title            String
+  amount           Float
+  date             String   // "YYYY-MM-DD" e.g. "2026-08-05"
+  time             String?  // "HH:mm" or "02:30 PM"
+  notes            String?
+  status           String   @default("PENDING") // "PENDING", "PAID", "OVERDUE"
+  businessEntityId String?
+  accountId        String?
+  categoryId       String?
+  categoryName     String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([userId, date])
+}
