@@ -3,13 +3,13 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const overviewController_1 = require("../controllers/overviewController");
 const transactionController_1 = require("../controllers/transactionController");
-const budgetController_1 = require("../controllers/budgetController");
-const walletController_1 = require("../controllers/walletController");
+const reportController_1 = require("../controllers/reportController");
 const analyticsController_1 = require("../controllers/analyticsController");
 const userController_1 = require("../controllers/userController");
 const businessEntityController_1 = require("../controllers/businessEntityController");
 const accountController_1 = require("../controllers/accountController");
 const categoryController_1 = require("../controllers/categoryController");
+const reminderController_1 = require("../controllers/reminderController");
 const router = (0, express_1.Router)();
 // Auth Endpoints
 router.post('/auth/login', userController_1.loginUser);
@@ -17,20 +17,20 @@ router.post('/auth/register', userController_1.registerUser);
 router.post('/auth/logout', userController_1.logoutUser);
 router.get('/auth/verify', userController_1.verifyToken);
 router.post('/auth/upload-avatar', userController_1.uploadAvatar);
+router.post('/auth/forgot-password', userController_1.requestPasswordReset);
+router.post('/auth/forgot-password/verify-otp', userController_1.verifyPasswordResetOtp);
+router.post('/auth/forgot-password/reset', userController_1.resetPassword);
 // Overview
 router.get('/overview', overviewController_1.getOverview);
 // Transactions
 router.get('/transactions', transactionController_1.getTransactions);
 router.post('/transactions', transactionController_1.transactionAttachmentUpload.single('attachment'), transactionController_1.createTransaction);
+router.put('/transactions/:id', transactionController_1.transactionAttachmentUpload.single('attachment'), transactionController_1.updateTransaction);
 router.post('/transactions/upload-attachment', transactionController_1.uploadTransactionAttachment);
 router.delete('/transactions/:id', transactionController_1.deleteTransaction);
-// Budgets & Goals
-router.get('/budgets', budgetController_1.getBudgets);
-router.put('/budgets/:id', budgetController_1.updateBudget);
-router.post('/goals', budgetController_1.createGoal);
-// Wallets
-router.get('/wallets', walletController_1.getWallets);
-router.post('/wallets', walletController_1.createWallet);
+// Reports
+router.get('/reports', reportController_1.getReport);
+router.get('/reports/export', reportController_1.exportReport);
 // Analytics
 router.get('/analytics', analyticsController_1.getAnalytics);
 // User Profile & Settings
@@ -52,4 +52,9 @@ router.get('/categories', categoryController_1.getCategories);
 router.post('/categories', categoryController_1.createCategory);
 router.put('/categories/:id', categoryController_1.updateCategory);
 router.delete('/categories/:id', categoryController_1.deleteCategory);
+// Reminders
+router.get('/reminders', reminderController_1.getReminders);
+router.post('/reminders', reminderController_1.createReminder);
+router.put('/reminders/:id', reminderController_1.updateReminder);
+router.delete('/reminders/:id', reminderController_1.deleteReminder);
 exports.default = router;

@@ -179,13 +179,23 @@ export const getOverview = async (req: Request, res: Response) => {
       };
     });
 
-    const businessEntities = await prisma.businessEntity.findMany({
-      where: { userId },
-    });
+    const businessEntities = await prisma.businessEntity
+      .findMany({
+        where: { userId },
+      })
+      .catch((err) => {
+        console.error('getOverview businessEntities error:', err);
+        return [];
+      });
 
-    const accounts = await prisma.account.findMany({
-      where: { userId },
-    });
+    const accounts = await prisma.account
+      .findMany({
+        where: { userId },
+      })
+      .catch((err) => {
+        console.error('getOverview accounts error:', err);
+        return [];
+      });
 
     // Build available months from transactions for month picker
     const monthSet = new Set<string>();
@@ -196,14 +206,19 @@ export const getOverview = async (req: Request, res: Response) => {
         monthSet.add(m);
       } catch {}
     });
-    const upcomingReminders = await (prisma as any).reminder.findMany({
-      where: {
-        userId,
-        status: { in: ['PENDING', 'OVERDUE'] },
-      },
-      orderBy: [{ date: 'asc' }, { time: 'asc' }],
-      take: 3,
-    });
+    const upcomingReminders = await (prisma as any).reminder
+      ?.findMany({
+        where: {
+          userId,
+          status: { in: ['PENDING', 'OVERDUE'] },
+        },
+        orderBy: [{ date: 'asc' }, { time: 'asc' }],
+        take: 3,
+      })
+      .catch((err: any) => {
+        console.error('getOverview reminders error:', err);
+        return [];
+      }) ?? [];
     const availableMonths = Array.from(monthSet).sort().reverse();
 
     res.json({
@@ -222,8 +237,12 @@ export const getOverview = async (req: Request, res: Response) => {
       availableMonths,
       upcomingReminders,
     });
-  } catch (error) {
-    console.error('getOverview error:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch overview metrics' });
+  } catch (error: any) {
+    console.error('getOverview error details:', error?.stack || error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch overview metrics',
+      details: error?.message || String(error),
+    });
   }
 };

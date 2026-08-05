@@ -3,10 +3,12 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+const dotenv_1 = __importDefault(require("dotenv"));
+// Load .env as early as possible so modules that initialize on import
+// (for example Prisma client) can read the DATABASE_URL value.
+dotenv_1.default.config();
 const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
-const dotenv_1 = __importDefault(require("dotenv"));
-dotenv_1.default.config();
 const api_1 = __importDefault(require("./routes/api"));
 const db_1 = require("./db");
 const path_1 = __importDefault(require("path"));
@@ -39,10 +41,8 @@ app.listen(Number(PORT), '0.0.0.0', async () => {
     catch (error) {
         dbStatus = `CONNECTION ERROR: ${error?.message || error}`;
     }
-    console.log(`=================================================`);
-    console.log(` FinLap Backend API Service is running on port ${PORT}`);
-    console.log(` Database Status: ${dbStatus}`);
-    console.log(` Local API:       http://localhost:${PORT}/api`);
-    console.log(` Network API:     http://192.168.29.2:${PORT}/api`);
-    console.log(`=================================================`);
+    // Log server and database status
+    console.log(`Server is running on port ${PORT}`);
+    console.log(`Database status: ${dbStatus}`);
 });
+exports.default = app;

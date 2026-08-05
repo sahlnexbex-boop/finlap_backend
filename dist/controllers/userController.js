@@ -3,12 +3,14 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteUserAccount = exports.verifyToken = exports.logoutUser = exports.registerUser = exports.loginUser = exports.updateUserSettings = exports.uploadAvatar = exports.getUserProfile = exports.seedDefaultDataForUser = void 0;
+exports.deleteUserAccount = exports.verifyToken = exports.logoutUser = exports.registerUser = exports.loginUser = exports.resetPassword = exports.verifyPasswordResetOtp = exports.requestPasswordReset = exports.updateUserSettings = exports.uploadAvatar = exports.getUserProfile = exports.seedDefaultDataForUser = void 0;
 exports.resolveRequestUserId = resolveRequestUserId;
 const db_1 = require("../db");
 const crypto_1 = __importDefault(require("crypto"));
 const fs_1 = __importDefault(require("fs"));
 const path_1 = __importDefault(require("path"));
+const bcryptjs_1 = __importDefault(require("bcryptjs"));
+const nodemailer_1 = __importDefault(require("nodemailer"));
 const ONE_MONTH_MS = 30 * 24 * 60 * 60 * 1000;
 // Ensure uploads/profile_photo directory exists
 const PROFILE_PHOTO_DIR = path_1.default.join(__dirname, '../../uploads/profile_photo');
@@ -19,6 +21,66 @@ if (!fs_1.default.existsSync(PROFILE_PHOTO_DIR)) {
 const usersDb = new Map();
 // Active sessions map: token -> userId
 const tokenSessions = new Map();
+const passwordResetRequests = new Map();
+const passwordResetTokens = new Map();
+const PASSWORD_RESET_OTP_TTL = 10 * 60 * 1000;
+const PASSWORD_RESET_TOKEN_TTL = 10 * 60 * 1000;
+const cleanupPasswordResetEntries = () => {
+    const now = Date.now();
+    for (const [email, entry] of passwordResetRequests.entries()) {
+        if (entry.expiresAt <= now) {
+            passwordResetRequests.delete(email);
+        }
+    }
+    for (const [token, entry] of passwordResetTokens.entries()) {
+        if (entry.expiresAt <= now) {
+            passwordResetTokens.delete(token);
+        }
+    }
+};
+const generateOtp = () => String(1000 + Math.floor(Math.random() * 9000));
+const getUserByEmail = async (normalizedEmail) => {
+    let user = usersDb.get(normalizedEmail);
+    if (!user) {
+        const dbUser = await db_1.prisma.user
+            .findUnique({ where: { email: normalizedEmail }, select: userSelect })
+            .catch(() => null);
+        if (dbUser) {
+            user = toStoredUser(dbUser, await getStoredPassword(normalizedEmail));
+            usersDb.set(normalizedEmail, user);
+        }
+    }
+    return user;
+};
+const sendPasswordResetEmail = async (toEmail, otp) => {
+    const from = process.env.EMAIL_USER;
+    const pass = process.env.EMAIL_PASS;
+    if (!from || !pass) {
+        throw new Error('Email transporter is not configured');
+    }
+    const transporter = nodemailer_1.default.createTransport({
+        service: 'gmail',
+        auth: {
+            user: from,
+            pass,
+        },
+    });
+    const mailOptions = {
+        from,
+        to: toEmail,
+        subject: 'FinLap Password Reset Code',
+        text: `Your FinLap password reset code is ${otp}. It expires in 10 minutes.`,
+        html: `
+      <div style="font-family: Arial, sans-serif;">
+        <p>Hi there,</p>
+        <p>Your FinLap password reset code is <strong>${otp}</strong>.</p>
+        <p>This code is valid for 10 minutes.</p>
+        <p>If you did not request a password reset, please ignore this email.</p>
+      </div>
+    `,
+    };
+    await transporter.sendMail(mailOptions);
+};
 // Seed default users
 const defaultJulian = {
     id: '00000000-0000-4000-8000-000000000001',
@@ -250,8 +312,10 @@ const updateUserSettings = async (req, res) => {
             activeUser = { ...prismaUser };
             usersDb.set(activeUser.email.toLowerCase(), activeUser);
         }
-        const { biometrics, notifications, currency, name, securityPin, theme, language, country, sex, place, phone, avatarUrl } = req.body;
+        const { biometrics, notifications, currency, name, email, securityPin, theme, language, country, sex, place, phone, avatarUrl, } = req.body;
         const cleanedAvatar = avatarUrl !== undefined ? cleanAvatarUrl(avatarUrl) : activeUser.avatarUrl;
+        const previousEmail = activeUser.email.toLowerCase();
+        const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : previousEmail;
         if (biometrics !== undefined)
             activeUser.biometrics = biometrics;
         if (notifications !== undefined)
@@ -260,6 +324,8 @@ const updateUserSettings = async (req, res) => {
             activeUser.currency = currency;
         if (name !== undefined)
             activeUser.name = name;
+        if (email !== undefined)
+            activeUser.email = normalizedEmail;
         if (securityPin !== undefined)
             activeUser.securityPin = securityPin;
         if (theme !== undefined)
@@ -276,7 +342,10 @@ const updateUserSettings = async (req, res) => {
             activeUser.phone = phone;
         if (avatarUrl !== undefined)
             activeUser.avatarUrl = cleanedAvatar;
-        usersDb.set(activeUser.email.toLowerCase(), activeUser);
+        if (email !== undefined && normalizedEmail !== previousEmail) {
+            usersDb.delete(previousEmail);
+        }
+        usersDb.set(normalizedEmail, activeUser);
         try {
             let user = await db_1.prisma.user.findUnique({ where: { id: activeUser.id }, select: userSelect });
             if (user) {
@@ -287,6 +356,7 @@ const updateUserSettings = async (req, res) => {
                         ...(notifications !== undefined && { notifications }),
                         ...(currency !== undefined && { currency }),
                         ...(name !== undefined && { name }),
+                        ...(email !== undefined && { email: normalizedEmail }),
                         ...(securityPin !== undefined && { securityPin }),
                         ...(theme !== undefined && { theme }),
                         ...(language !== undefined && { language }),
@@ -298,6 +368,9 @@ const updateUserSettings = async (req, res) => {
                     },
                     select: userSelect,
                 });
+                if (user) {
+                    activeUser = toStoredUser(user, activeUser.password);
+                }
             }
         }
         catch (e) { }
@@ -308,6 +381,87 @@ const updateUserSettings = async (req, res) => {
     }
 };
 exports.updateUserSettings = updateUserSettings;
+const requestPasswordReset = async (req, res) => {
+    try {
+        const { email } = req.body;
+        if (!email) {
+            return res.status(400).json({ success: false, message: 'Email is required' });
+        }
+        const normalizedEmail = email.trim().toLowerCase();
+        const user = await getUserByEmail(normalizedEmail);
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'Email not found' });
+        }
+        cleanupPasswordResetEntries();
+        const otp = generateOtp();
+        passwordResetRequests.set(normalizedEmail, {
+            otp,
+            expiresAt: Date.now() + PASSWORD_RESET_OTP_TTL,
+        });
+        await sendPasswordResetEmail(normalizedEmail, otp);
+        res.json({ success: true, message: 'OTP sent to email' });
+    }
+    catch (error) {
+        console.error('requestPasswordReset error:', error);
+        res.status(500).json({ success: false, message: error.message || 'Failed to send OTP' });
+    }
+};
+exports.requestPasswordReset = requestPasswordReset;
+const verifyPasswordResetOtp = async (req, res) => {
+    try {
+        const { email, otp } = req.body;
+        if (!email || !otp) {
+            return res.status(400).json({ success: false, message: 'Email and OTP are required' });
+        }
+        const normalizedEmail = email.trim().toLowerCase();
+        cleanupPasswordResetEntries();
+        const request = passwordResetRequests.get(normalizedEmail);
+        if (!request || request.otp !== String(otp).trim()) {
+            return res.status(400).json({ success: false, message: 'Invalid or expired OTP' });
+        }
+        passwordResetRequests.delete(normalizedEmail);
+        const resetToken = `reset_${crypto_1.default.randomUUID()}`;
+        passwordResetTokens.set(resetToken, {
+            email: normalizedEmail,
+            expiresAt: Date.now() + PASSWORD_RESET_TOKEN_TTL,
+        });
+        res.json({ success: true, message: 'OTP verified', resetToken });
+    }
+    catch (error) {
+        console.error('verifyPasswordResetOtp error:', error);
+        res.status(500).json({ success: false, message: error.message || 'Failed to verify OTP' });
+    }
+};
+exports.verifyPasswordResetOtp = verifyPasswordResetOtp;
+const resetPassword = async (req, res) => {
+    try {
+        const { token, password } = req.body;
+        if (!token || !password) {
+            return res.status(400).json({ success: false, message: 'Reset token and password are required' });
+        }
+        cleanupPasswordResetEntries();
+        const entry = passwordResetTokens.get(String(token));
+        if (!entry) {
+            return res.status(400).json({ success: false, message: 'Invalid or expired reset token' });
+        }
+        const normalizedEmail = entry.email;
+        const user = await getUserByEmail(normalizedEmail);
+        if (!user) {
+            return res.status(404).json({ success: false, message: 'User not found' });
+        }
+        const hashedPassword = await bcryptjs_1.default.hash(String(password), 10);
+        user.password = hashedPassword;
+        usersDb.set(normalizedEmail, user);
+        await saveStoredPassword(user.id, hashedPassword);
+        passwordResetTokens.delete(String(token));
+        res.json({ success: true, message: 'Password has been reset successfully' });
+    }
+    catch (error) {
+        console.error('resetPassword error:', error);
+        res.status(500).json({ success: false, message: error.message || 'Failed to reset password' });
+    }
+};
+exports.resetPassword = resetPassword;
 const loginUser = async (req, res) => {
     try {
         const { email, password } = req.body;
@@ -335,11 +489,24 @@ const loginUser = async (req, res) => {
                 message: 'User not found!',
             });
         }
-        if (user.password && user.password !== password) {
-            return res.status(400).json({
-                success: false,
-                message: 'Invalid Password!',
-            });
+        if (user.password) {
+            const isBcrypt = user.password.startsWith('$2a$') || user.password.startsWith('$2b$');
+            const isMatch = isBcrypt
+                ? await bcryptjs_1.default.compare(password, user.password)
+                : user.password === password;
+            if (!isMatch) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Invalid Password!',
+                });
+            }
+            // Upgrade plain text password to hashed password if needed
+            if (!isBcrypt) {
+                const newHash = await bcryptjs_1.default.hash(password, 10);
+                user.password = newHash;
+                usersDb.set(normalizedEmail, user);
+                await saveStoredPassword(user.id, newHash);
+            }
         }
         await (0, exports.seedDefaultDataForUser)(user.id);
         const { token, expiresAt } = issueSession(user.id);
@@ -387,6 +554,7 @@ const registerUser = async (req, res) => {
             });
         }
         const cleanedAvatar = cleanAvatarUrl(avatarUrl);
+        const hashedPassword = await bcryptjs_1.default.hash(password, 10);
         let newUser;
         try {
             const createdUser = await db_1.prisma.user.create({
@@ -409,15 +577,15 @@ const registerUser = async (req, res) => {
                 },
                 select: userSelect,
             });
-            await saveStoredPassword(createdUser.id, password);
-            newUser = toStoredUser(createdUser, password);
+            await saveStoredPassword(createdUser.id, hashedPassword);
+            newUser = toStoredUser(createdUser, hashedPassword);
         }
         catch (e) {
             newUser = {
                 id: crypto_1.default.randomUUID(),
                 name: name.trim(),
                 email: normalizedEmail,
-                password,
+                password: hashedPassword,
                 avatarUrl: cleanedAvatar,
                 country: country || undefined,
                 sex: sex || undefined,
@@ -496,10 +664,6 @@ const deleteUserAccount = async (req, res) => {
             await db_1.prisma.businessEntity.deleteMany({ where: { userId } });
             await db_1.prisma.account.deleteMany({ where: { userId } });
             await db_1.prisma.category.deleteMany({ where: { userId } });
-            await db_1.prisma.wallet.deleteMany({ where: { userId } });
-            await db_1.prisma.budget.deleteMany({ where: { userId } });
-            await db_1.prisma.goal.deleteMany({ where: { userId } });
-            await db_1.prisma.netWorthHistory.deleteMany({ where: { userId } });
             await db_1.prisma.user.deleteMany({ where: { id: userId } });
         }
         catch (e) {

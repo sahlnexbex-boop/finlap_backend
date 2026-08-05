@@ -6,35 +6,28 @@ const userController_1 = require("./userController");
 const getAnalytics = async (req, res) => {
     try {
         const userId = (0, userController_1.resolveRequestUserId)(req);
-        const history = await db_1.prisma.netWorthHistory.findMany({
-            where: { userId },
-            orderBy: { createdAt: 'asc' },
-        });
-        const budgets = await db_1.prisma.budget.findMany({
+        const transactions = await db_1.prisma.transaction.findMany({
             where: { userId },
         });
-        const categoryBreakdown = budgets.map((b) => ({
-            category: b.category,
-            amount: b.spent,
-            color: b.color,
+        const categoryMap = {};
+        transactions.forEach((tx) => {
+            if (tx.type === 0) { // Expense
+                categoryMap[tx.category] = (categoryMap[tx.category] || 0) + tx.amount;
+            }
+        });
+        const colors = ['#8B5CF6', '#3B82F6', '#10B981', '#F59E0B', '#EF4444'];
+        const categoryBreakdown = Object.entries(categoryMap).map(([category, amount], idx) => ({
+            category,
+            amount,
+            color: colors[idx % colors.length],
         }));
-        const monthlyComparison = [
-            { month: 'Jan', income: 14000, expense: 3800 },
-            { month: 'Feb', income: 15500, expense: 4100 },
-            { month: 'Mar', income: 15000, expense: 3900 },
-            { month: 'Apr', income: 16800, expense: 4500 },
-            { month: 'May', income: 17200, expense: 4000 },
-            { month: 'Jun', income: 18500, expense: 4210 },
-        ];
         res.json({
             success: true,
-            netWorthTrend: history,
             categoryBreakdown,
-            monthlyComparison,
             metrics: {
                 savingsRate: '77.2%',
                 spendingVelocity: '-4.8% vs last month',
-                topExpenseCategory: 'Dining & Experiences',
+                topExpenseCategory: categoryBreakdown[0]?.category || 'General',
                 cashFlowHealth: 'Optimal (9.4/10)',
             },
         });
