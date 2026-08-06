@@ -8,6 +8,8 @@ import cors from 'cors';
 import apiRouter from './routes/api';
 import { prisma } from './db';
 import path from 'path';
+import { startReminderScheduler } from './services/reminderScheduler';
+
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -47,7 +49,11 @@ app.listen(Number(PORT), '0.0.0.0', async () => {
   // Log server and database status
   console.log(`Server is running on port ${PORT}`);
   console.log(`Database status: ${dbStatus}`);
+
+  // Start background notification scheduler
+  startReminderScheduler();
 });
+
 
 export default app;
 

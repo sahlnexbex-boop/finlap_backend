@@ -107,3 +107,21 @@ model Reminder {
 
   @@index([userId, date])
 }
+
+model Notification {
+  id           String    @id @default(uuid())
+  userId       String
+  reminderId   String?
+  title        String
+  message      String
+  amount       Float?
+  categoryName String?
+  isRead       Boolean   @default(false)
+  readAt       DateTime?
+  scheduledAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([userId, createdAt])
+}
+

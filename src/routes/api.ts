@@ -47,8 +47,16 @@ import {
   updateReminder,
   deleteReminder,
 } from '../controllers/reminderController';
+import {
+  getNotifications,
+  markNotificationAsRead,
+  markAllNotificationsAsRead,
+  deleteNotification,
+  sendTestNotification,
+} from '../controllers/notificationController';
 
 const router = Router();
+
 
 // Auth Endpoints
 router.post('/auth/login', loginUser);
@@ -106,4 +114,12 @@ router.post('/reminders', createReminder);
 router.put('/reminders/:id', updateReminder);
 router.delete('/reminders/:id', deleteReminder);
 
+// Notifications
+router.get('/notifications', getNotifications);
+router.put('/notifications/read-all', markAllNotificationsAsRead);
+router.put('/notifications/:id/read', markNotificationAsRead);
+router.delete('/notifications/:id', deleteNotification);
+router.post('/notifications/test', sendTestNotification);
+
 export default router;
+

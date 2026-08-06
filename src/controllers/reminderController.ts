@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
 import { prisma } from '../db';
 import { resolveRequestUserId } from './userController';
+import { scheduleReminderNotification } from '../services/reminderScheduler';
+
 
 // GET /api/reminders
 export const getReminders = async (req: Request, res: Response) => {
@@ -96,7 +98,13 @@ export const createReminder = async (req: Request, res: Response) => {
       },
     });
 
+    // Schedule push notification via ntfy.sh & generate in-app notification
+    scheduleReminderNotification(reminder).catch((err) => {
+      console.error('Error scheduling notification on create:', err);
+    });
+
     res.status(201).json({ success: true, data: reminder });
+
   } catch (error) {
     console.error('createReminder error:', error);
     res.status(500).json({ success: false, error: 'Failed to create reminder' });
@@ -134,7 +142,12 @@ export const updateReminder = async (req: Request, res: Response) => {
       },
     });
 
+    scheduleReminderNotification(updated).catch((err) => {
+      console.error('Error scheduling notification on update:', err);
+    });
+
     res.json({ success: true, data: updated });
+
   } catch (error) {
     console.error('updateReminder error:', error);
     res.status(500).json({ success: false, error: 'Failed to update reminder' });
