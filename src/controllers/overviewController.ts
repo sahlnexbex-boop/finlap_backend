@@ -72,30 +72,6 @@ export const getOverview = async (req: Request, res: Response) => {
 
     let user = await prisma.user.findUnique({ where: { id: userId }, select: userSelect }).catch(() => null);
     if (!user) {
-      const fallbackEmail = buildFallbackUserEmail(userId);
-      user = await prisma.user
-        .create({
-          data: {
-            id: userId,
-            name: 'FinLap User',
-            email: fallbackEmail,
-            currency: 'INR',
-            memberTier: 'Platinum Member',
-            proBadge: true,
-            biometrics: true,
-            notifications: true,
-            securityPin: '1234',
-          },
-        })
-        .catch(async (error: any) => {
-          if (error?.code === 'P2002') {
-            return prisma.user.findUnique({ where: { email: fallbackEmail }, select: userSelect });
-          }
-          throw error;
-        });
-    }
-
-    if (!user) {
       return res.status(404).json({ success: false, error: 'User not found' });
     }
 

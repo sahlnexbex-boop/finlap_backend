@@ -15,6 +15,16 @@ async function main() {
         console.log(`Cleaned user ${user.email} avatarUrl in PostgreSQL DB -> ${cleaned}`);
       }
     }
+    const dummyUsers = await prisma.user.deleteMany({
+      where: {
+        OR: [
+          { name: 'FinLap User' },
+          { id: '00000000-0000-4000-8000-000000000001' },
+          { email: { contains: '00000000-0000-4000-8000' } },
+        ],
+      },
+    });
+    console.log(`Deleted ${dummyUsers.count} dummy FinLap User records from PostgreSQL DB.`);
   } catch (e) {
     console.error('Error updating DB records:', e);
   } finally {
