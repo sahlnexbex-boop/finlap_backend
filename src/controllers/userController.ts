@@ -198,9 +198,12 @@ export const seedDefaultDataForUser = async (userId: string) => {
   }
 };
 
+const JWT_SECRET = process.env.JWT_SECRET || 'finlap_secret_key_2026';
+
 const issueSession = (userId: string) => {
-  const token = `finlap_token_${crypto.randomUUID()}`;
   const expiresAt = Date.now() + ONE_MONTH_MS;
+  const sig = crypto.createHmac('sha256', JWT_SECRET).update(`${userId}:${expiresAt}`).digest('hex');
+  const token = `finlap_token_${userId}_${expiresAt}_${sig}`;
   tokenSessions.set(token, userId);
   return { token, expiresAt };
 };
@@ -254,9 +257,27 @@ export function resolveRequestUserId(req: Request): string {
   const authHeader = req.headers.authorization;
   if (authHeader && authHeader.startsWith('Bearer ')) {
     const token = authHeader.substring(7);
-    const userId = tokenSessions.get(token);
-    if (userId) {
-      return userId;
+    
+    // 1. In-memory fast cache lookup
+    const cachedUserId = tokenSessions.get(token);
+    if (cachedUserId) {
+      return cachedUserId;
+    }
+
+    // 2. Decode HMAC signed token: finlap_token_<userId>_<expiresAt>_<sig>
+    if (token.startsWith('finlap_token_')) {
+      const parts = token.replace('finlap_token_', '').split('_');
+      if (parts.length >= 3) {
+        const userId = parts[0];
+        const expiresAt = parseInt(parts[1], 10);
+        const sig = parts[2];
+        const expectedSig = crypto.createHmac('sha256', JWT_SECRET).update(`${userId}:${expiresAt}`).digest('hex');
+
+        if (sig === expectedSig && expiresAt > Date.now()) {
+          tokenSessions.set(token, userId);
+          return userId;
+        }
+      }
     }
   }
 
@@ -268,13 +289,13 @@ export function resolveRequestUserId(req: Request): string {
   return defaultJulian.id;
 }
 
-// Helper to get active user by token or default
+// Helper to get active user by token
 function getUserByToken(req: Request): StoredUser {
   const userId = resolveRequestUserId(req);
   for (const u of usersDb.values()) {
     if (u.id === userId) return u;
   }
-  return Array.from(usersDb.values())[0] || defaultJulian;
+  return defaultJulian;
 }
 
 function cleanAvatarUrl(url?: string | null): string | undefined {
@@ -289,16 +310,14 @@ function cleanAvatarUrl(url?: string | null): string | undefined {
 export const getUserProfile = async (req: Request, res: Response) => {
   try {
     const userId = resolveRequestUserId(req);
-    const activeUser = getUserByToken(req);
     let prismaUser = await prisma.user.findUnique({
       where: { id: userId },
       select: userSelect,
     }).catch(() => null);
 
-    const userData = prismaUser || (activeUser.id === userId ? activeUser : null);
-    if (!userData) {
-      return res.status(404).json({ success: false, error: 'User not found' });
-    }
+    const activeUser = getUserByToken(req);
+    const userData = prismaUser || (activeUser.id === userId ? activeUser : null) || defaultJulian;
+
     if (userData.avatarUrl) {
       userData.avatarUrl = cleanAvatarUrl(userData.avatarUrl);
     }
