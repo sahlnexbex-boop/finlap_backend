@@ -693,16 +693,64 @@ export const registerUser = async (req: Request, res: Response) => {
   }
 };
 
-export const logoutUser = async (req: Request, res: Response) => {
-  const authHeader = req.headers.authorization;
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    const token = authHeader.substring(7);
-    tokenSessions.delete(token);
+export const updateFcmToken = async (req: Request, res: Response) => {
+  try {
+    const userId = resolveRequestUserId(req);
+    const { fcmToken } = req.body;
+    if (!fcmToken) {
+      return res.status(400).json({ success: false, message: 'fcmToken is required' });
+    }
+
+    await (prisma as any).user.update({
+      where: { id: userId },
+      data: { fcmToken },
+    }).catch(() => null);
+
+    res.json({ success: true, message: 'FCM token registered successfully' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to update FCM token' });
   }
-  res.json({
-    success: true,
-    message: 'Signed out successfully from server',
-  });
+};
+
+export const removeFcmToken = async (req: Request, res: Response) => {
+  try {
+    const userId = resolveRequestUserId(req);
+
+    await (prisma as any).user.update({
+      where: { id: userId },
+      data: { fcmToken: null },
+    }).catch(() => null);
+
+    res.json({ success: true, message: 'FCM token cleared successfully' });
+  } catch (error) {
+    res.status(500).json({ success: false, message: 'Failed to clear FCM token' });
+  }
+};
+
+export const logoutUser = async (req: Request, res: Response) => {
+  try {
+    const userId = resolveRequestUserId(req);
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.substring(7);
+      tokenSessions.delete(token);
+    }
+    // Remove FCM device token on logout so push notifications stop
+    await (prisma as any).user.update({
+      where: { id: userId },
+      data: { fcmToken: null },
+    }).catch(() => null);
+
+    res.json({
+      success: true,
+      message: 'Signed out successfully from server',
+    });
+  } catch (error) {
+    res.json({
+      success: true,
+      message: 'Signed out successfully from server',
+    });
+  }
 };
 
 export const verifyToken = async (req: Request, res: Response) => {

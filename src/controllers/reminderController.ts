@@ -98,7 +98,7 @@ export const createReminder = async (req: Request, res: Response) => {
       },
     });
 
-    // Schedule push notification via ntfy.sh & generate in-app notification
+    // Schedule in-app notification
     scheduleReminderNotification(reminder).catch((err) => {
       console.error('Error scheduling notification on create:', err);
     });

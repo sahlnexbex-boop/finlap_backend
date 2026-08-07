@@ -1,10 +1,9 @@
 import { Request, Response } from 'express';
 import { prisma } from '../db';
 import { resolveRequestUserId } from './userController';
-import { sendNtfyNotification, getUserNtfyTopic } from '../services/ntfyService';
 
 // GET /api/notifications
-// Retrieves user's notifications for the LAST 30 DAYS with unread count and ntfy info
+// Retrieves user's notifications for the LAST 30 DAYS with unread count
 export const getNotifications = async (req: Request, res: Response) => {
   try {
     const userId = resolveRequestUserId(req);
@@ -39,15 +38,10 @@ export const getNotifications = async (req: Request, res: Response) => {
       }),
     ]);
 
-    const ntfyTopic = getUserNtfyTopic(userId);
-    const ntfyUrl = `https://ntfy.sh/${ntfyTopic}`;
-
     res.json({
       success: true,
       data: notifications,
       unreadCount,
-      ntfyTopic,
-      ntfyUrl,
     });
   } catch (error) {
     console.error('getNotifications error:', error);
@@ -151,26 +145,16 @@ export const deleteNotification = async (req: Request, res: Response) => {
 };
 
 // POST /api/notifications/test
-// Sends a test push notification via ntfy.sh and logs to DB
+// Sends a test notification and logs to DB
 export const sendTestNotification = async (req: Request, res: Response) => {
   try {
     const userId = resolveRequestUserId(req);
-    const ntfyTopic = getUserNtfyTopic(userId);
     const now = new Date();
 
-    const title = 'FinLap Test Push Notification';
-    const message = `Test notification dispatched via ntfy.sh at ${now.toLocaleTimeString()}. Everything is working perfectly!`;
+    const title = 'FinLap Test Notification';
+    const message = `Test notification generated at ${now.toLocaleTimeString()}. System is operating normally!`;
 
-    // 1. Send push to ntfy.sh
-    const ntfyResult = await sendNtfyNotification({
-      topic: ntfyTopic,
-      title,
-      message,
-      tags: ['tada', 'sparkles', 'bell'],
-      priority: 3,
-    });
-
-    // 2. Create in-app Notification record
+    // Create in-app Notification record
     const notification = await (prisma as any).notification.create({
       data: {
         userId,
@@ -189,10 +173,7 @@ export const sendTestNotification = async (req: Request, res: Response) => {
     res.json({
       success: true,
       data: notification,
-      ntfyResult,
       unreadCount,
-      ntfyTopic,
-      ntfyUrl: `https://ntfy.sh/${ntfyTopic}`,
     });
   } catch (error) {
     console.error('sendTestNotification error:', error);

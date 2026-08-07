@@ -13,6 +13,8 @@ import { getAnalytics } from '../controllers/analyticsController';
 import {
   getUserProfile,
   updateUserSettings,
+  updateFcmToken,
+  removeFcmToken,
   loginUser,
   registerUser,
   logoutUser,
@@ -88,6 +90,8 @@ router.get('/analytics', getAnalytics);
 // User Profile & Settings
 router.get('/user/profile', getUserProfile);
 router.put('/user/settings', updateUserSettings);
+router.post('/user/fcm-token', updateFcmToken);
+router.delete('/user/fcm-token', removeFcmToken);
 router.delete('/user/account', deleteUserAccount);
 
 // Business Entities

@@ -1,5 +1,5 @@
 import { prisma } from '../db';
-import { sendNtfyNotification, getUserNtfyTopic } from './ntfyService';
+import { sendFcmPushNotification } from './firebaseService';
 
 /**
  * Combines reminder date ("YYYY-MM-DD") and time ("HH:mm" or "02:30 PM") into a Date object.
@@ -46,34 +46,21 @@ export const parseReminderDateTime = (dateStr: string, timeStr?: string | null):
 };
 
 /**
- * Schedules immediate or future ntfy.sh notification for a given reminder
+ * Schedules immediate or future in-app & FCM push notification for a given reminder
  */
 export const scheduleReminderNotification = async (reminder: any) => {
   if (!reminder || !reminder.userId) return;
 
   const scheduledDate = parseReminderDateTime(reminder.date, reminder.time);
-  const topic = getUserNtfyTopic(reminder.userId);
-  const formattedAmount = reminder.amount ? `$${Number(reminder.amount).toFixed(2)}` : '';
-  const message = `Reminder: ${reminder.title} ${formattedAmount ? `(${formattedAmount})` : ''}. ${reminder.notes || ''}`.trim();
 
-  // 1. Publish / Schedule on ntfy.sh
-  await sendNtfyNotification({
-    topic,
-    title: `FinLap Reminder: ${reminder.title}`,
-    message,
-    scheduledAt: scheduledDate || undefined,
-    tags: ['calendar', 'moneybag', 'bell'],
-    priority: 4,
-  });
-
-  // 2. If scheduled time is due or past, create in-app notification record right away
+  // If scheduled time is due or past, create in-app notification record & send FCM push
   if (!scheduledDate || scheduledDate <= new Date()) {
     await ensureInAppNotificationRecord(reminder, scheduledDate || new Date());
   }
 };
 
 /**
- * Creates in-app Notification DB record if one does not already exist for this reminder
+ * Creates in-app Notification DB record & sends FCM push notification if user has registered FCM token
  */
 export const ensureInAppNotificationRecord = async (reminder: any, scheduledAt?: Date) => {
   try {
@@ -99,9 +86,30 @@ export const ensureInAppNotificationRecord = async (reminder: any, scheduledAt?:
         },
       });
       console.log(`[Scheduler] In-app notification created for reminder: ${reminder.id}`);
+
+      // Dispatch FCM Push Notification if user has an active fcmToken and notifications enabled
+      const user = await (prisma as any).user.findUnique({
+        where: { id: reminder.userId },
+        select: { fcmToken: true, notifications: true },
+      });
+
+      if (user && user.notifications && user.fcmToken) {
+        const amountStr = reminder.amount ? `$${Number(reminder.amount).toFixed(2)}` : '';
+        const bodyText = reminder.notes || `Reminder due for ${reminder.title} ${amountStr ? `(${amountStr})` : ''}`.trim();
+        
+        await sendFcmPushNotification({
+          fcmToken: user.fcmToken,
+          title: `Reminder: ${reminder.title}`,
+          body: bodyText,
+          data: {
+            reminderId: String(reminder.id),
+            type: 'REMINDER_DUE',
+          },
+        });
+      }
     }
   } catch (err) {
-    console.error('[Scheduler] Error creating in-app notification:', err);
+    console.error('[Scheduler] Error processing reminder notification:', err);
   }
 };
 

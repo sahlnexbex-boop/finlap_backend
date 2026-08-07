@@ -26,6 +26,7 @@ model User {
   securityPin   String   @default("1234")
   theme         String   @default("Midnight Slate")
   language      String   @default("English (US)")
+  fcmToken      String?
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 }
