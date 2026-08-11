@@ -49,8 +49,47 @@ export const getNotifications = async (req: Request, res: Response) => {
   }
 };
 
+// GET /api/notifications/:id
+// Fetches single notification by ID and automatically marks it as read
+export const getNotificationById = async (req: Request, res: Response) => {
+  try {
+    const userId = resolveRequestUserId(req);
+    const { id } = req.params;
+
+    const existing = await (prisma as any).notification.findFirst({
+      where: { id, userId },
+    });
+
+    if (!existing) {
+      return res.status(404).json({ success: false, error: 'Notification not found' });
+    }
+
+    let updated = existing;
+    if (!existing.isRead) {
+      updated = await (prisma as any).notification.update({
+        where: { id },
+        data: {
+          isRead: true,
+          readAt: new Date(),
+        },
+      });
+    }
+
+    const unreadCount = await (prisma as any).notification.count({
+      where: {
+        userId,
+        isRead: false,
+      },
+    });
+
+    res.json({ success: true, data: updated, unreadCount });
+  } catch (error) {
+    console.error('getNotificationById error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch notification details' });
+  }
+};
+
 // PUT /api/notifications/:id/read
-// Marks a single notification as read
 export const markNotificationAsRead = async (req: Request, res: Response) => {
   try {
     const userId = resolveRequestUserId(req);
