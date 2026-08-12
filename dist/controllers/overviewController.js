@@ -65,29 +65,6 @@ const getOverview = async (req, res) => {
         const filterAccountId = req.query.accountId ? String(req.query.accountId) : undefined;
         let user = await db_1.prisma.user.findUnique({ where: { id: userId }, select: userSelect }).catch(() => null);
         if (!user) {
-            const fallbackEmail = buildFallbackUserEmail(userId);
-            user = await db_1.prisma.user
-                .create({
-                data: {
-                    id: userId,
-                    name: 'FinLap User',
-                    email: fallbackEmail,
-                    currency: 'INR',
-                    memberTier: 'Platinum Member',
-                    proBadge: true,
-                    biometrics: true,
-                    notifications: true,
-                    securityPin: '1234',
-                },
-            })
-                .catch(async (error) => {
-                if (error?.code === 'P2002') {
-                    return db_1.prisma.user.findUnique({ where: { email: fallbackEmail }, select: userSelect });
-                }
-                throw error;
-            });
-        }
-        if (!user) {
             return res.status(404).json({ success: false, error: 'User not found' });
         }
         // Build where clause for transactions

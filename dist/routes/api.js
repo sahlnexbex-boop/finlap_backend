@@ -10,6 +10,7 @@ const businessEntityController_1 = require("../controllers/businessEntityControl
 const accountController_1 = require("../controllers/accountController");
 const categoryController_1 = require("../controllers/categoryController");
 const reminderController_1 = require("../controllers/reminderController");
+const notificationController_1 = require("../controllers/notificationController");
 const router = (0, express_1.Router)();
 // Auth Endpoints
 router.post('/auth/login', userController_1.loginUser);
@@ -36,6 +37,8 @@ router.get('/analytics', analyticsController_1.getAnalytics);
 // User Profile & Settings
 router.get('/user/profile', userController_1.getUserProfile);
 router.put('/user/settings', userController_1.updateUserSettings);
+router.post('/user/fcm-token', userController_1.updateFcmToken);
+router.delete('/user/fcm-token', userController_1.removeFcmToken);
 router.delete('/user/account', userController_1.deleteUserAccount);
 // Business Entities
 router.get('/business-entities', businessEntityController_1.getBusinessEntities);
@@ -57,4 +60,11 @@ router.get('/reminders', reminderController_1.getReminders);
 router.post('/reminders', reminderController_1.createReminder);
 router.put('/reminders/:id', reminderController_1.updateReminder);
 router.delete('/reminders/:id', reminderController_1.deleteReminder);
+// Notifications
+router.get('/notifications', notificationController_1.getNotifications);
+router.get('/notifications/:id', notificationController_1.getNotificationById);
+router.put('/notifications/read-all', notificationController_1.markAllNotificationsAsRead);
+router.put('/notifications/:id/read', notificationController_1.markNotificationAsRead);
+router.delete('/notifications/:id', notificationController_1.deleteNotification);
+router.post('/notifications/test', notificationController_1.sendTestNotification);
 exports.default = router;

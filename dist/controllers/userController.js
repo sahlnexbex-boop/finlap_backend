@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.deleteUserAccount = exports.verifyToken = exports.logoutUser = exports.registerUser = exports.loginUser = exports.resetPassword = exports.verifyPasswordResetOtp = exports.requestPasswordReset = exports.updateUserSettings = exports.uploadAvatar = exports.getUserProfile = exports.seedDefaultDataForUser = void 0;
+exports.deleteUserAccount = exports.verifyToken = exports.logoutUser = exports.removeFcmToken = exports.updateFcmToken = exports.registerUser = exports.loginUser = exports.resetPassword = exports.verifyPasswordResetOtp = exports.requestPasswordReset = exports.updateUserSettings = exports.uploadAvatar = exports.getUserProfile = exports.seedDefaultDataForUser = void 0;
 exports.resolveRequestUserId = resolveRequestUserId;
 const db_1 = require("../db");
 const crypto_1 = __importDefault(require("crypto"));
@@ -167,9 +167,11 @@ const seedDefaultDataForUser = async (userId) => {
     }
 };
 exports.seedDefaultDataForUser = seedDefaultDataForUser;
+const JWT_SECRET = process.env.JWT_SECRET || 'finlap_secret_key_2026';
 const issueSession = (userId) => {
-    const token = `finlap_token_${crypto_1.default.randomUUID()}`;
     const expiresAt = Date.now() + ONE_MONTH_MS;
+    const sig = crypto_1.default.createHmac('sha256', JWT_SECRET).update(`${userId}:${expiresAt}`).digest('hex');
+    const token = `finlap_token_${userId}_${expiresAt}_${sig}`;
     tokenSessions.set(token, userId);
     return { token, expiresAt };
 };
@@ -221,9 +223,24 @@ function resolveRequestUserId(req) {
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith('Bearer ')) {
         const token = authHeader.substring(7);
-        const userId = tokenSessions.get(token);
-        if (userId) {
-            return userId;
+        // 1. In-memory fast cache lookup
+        const cachedUserId = tokenSessions.get(token);
+        if (cachedUserId) {
+            return cachedUserId;
+        }
+        // 2. Decode HMAC signed token: finlap_token_<userId>_<expiresAt>_<sig>
+        if (token.startsWith('finlap_token_')) {
+            const parts = token.replace('finlap_token_', '').split('_');
+            if (parts.length >= 3) {
+                const userId = parts[0];
+                const expiresAt = parseInt(parts[1], 10);
+                const sig = parts[2];
+                const expectedSig = crypto_1.default.createHmac('sha256', JWT_SECRET).update(`${userId}:${expiresAt}`).digest('hex');
+                if (sig === expectedSig && expiresAt > Date.now()) {
+                    tokenSessions.set(token, userId);
+                    return userId;
+                }
+            }
         }
     }
     const header = req.headers['x-user-id'];
@@ -233,14 +250,14 @@ function resolveRequestUserId(req) {
         return req.query.userId;
     return defaultJulian.id;
 }
-// Helper to get active user by token or default
+// Helper to get active user by token
 function getUserByToken(req) {
     const userId = resolveRequestUserId(req);
     for (const u of usersDb.values()) {
         if (u.id === userId)
             return u;
     }
-    return Array.from(usersDb.values())[0] || defaultJulian;
+    return defaultJulian;
 }
 function cleanAvatarUrl(url) {
     if (!url)
@@ -254,15 +271,12 @@ function cleanAvatarUrl(url) {
 const getUserProfile = async (req, res) => {
     try {
         const userId = resolveRequestUserId(req);
-        const activeUser = getUserByToken(req);
         let prismaUser = await db_1.prisma.user.findUnique({
             where: { id: userId },
             select: userSelect,
         }).catch(() => null);
-        const userData = prismaUser || (activeUser.id === userId ? activeUser : null);
-        if (!userData) {
-            return res.status(404).json({ success: false, error: 'User not found' });
-        }
+        const activeUser = getUserByToken(req);
+        const userData = prismaUser || (activeUser.id === userId ? activeUser : null) || defaultJulian;
         if (userData.avatarUrl) {
             userData.avatarUrl = cleanAvatarUrl(userData.avatarUrl);
         }
@@ -621,16 +635,62 @@ const registerUser = async (req, res) => {
     }
 };
 exports.registerUser = registerUser;
-const logoutUser = async (req, res) => {
-    const authHeader = req.headers.authorization;
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-        const token = authHeader.substring(7);
-        tokenSessions.delete(token);
+const updateFcmToken = async (req, res) => {
+    try {
+        const userId = resolveRequestUserId(req);
+        const { fcmToken } = req.body;
+        if (!fcmToken) {
+            return res.status(400).json({ success: false, message: 'fcmToken is required' });
+        }
+        await db_1.prisma.user.update({
+            where: { id: userId },
+            data: { fcmToken },
+        }).catch(() => null);
+        res.json({ success: true, message: 'FCM token registered successfully' });
     }
-    res.json({
-        success: true,
-        message: 'Signed out successfully from server',
-    });
+    catch (error) {
+        res.status(500).json({ success: false, message: 'Failed to update FCM token' });
+    }
+};
+exports.updateFcmToken = updateFcmToken;
+const removeFcmToken = async (req, res) => {
+    try {
+        const userId = resolveRequestUserId(req);
+        await db_1.prisma.user.update({
+            where: { id: userId },
+            data: { fcmToken: null },
+        }).catch(() => null);
+        res.json({ success: true, message: 'FCM token cleared successfully' });
+    }
+    catch (error) {
+        res.status(500).json({ success: false, message: 'Failed to clear FCM token' });
+    }
+};
+exports.removeFcmToken = removeFcmToken;
+const logoutUser = async (req, res) => {
+    try {
+        const userId = resolveRequestUserId(req);
+        const authHeader = req.headers.authorization;
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+            const token = authHeader.substring(7);
+            tokenSessions.delete(token);
+        }
+        // Remove FCM device token on logout so push notifications stop
+        await db_1.prisma.user.update({
+            where: { id: userId },
+            data: { fcmToken: null },
+        }).catch(() => null);
+        res.json({
+            success: true,
+            message: 'Signed out successfully from server',
+        });
+    }
+    catch (error) {
+        res.json({
+            success: true,
+            message: 'Signed out successfully from server',
+        });
+    }
 };
 exports.logoutUser = logoutUser;
 const verifyToken = async (req, res) => {

@@ -12,6 +12,7 @@ const cors_1 = __importDefault(require("cors"));
 const api_1 = __importDefault(require("./routes/api"));
 const db_1 = require("./db");
 const path_1 = __importDefault(require("path"));
+const reminderScheduler_1 = require("./services/reminderScheduler");
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 5000;
 app.use((0, cors_1.default)());
@@ -24,7 +25,6 @@ app.get('/', (req, res) => {
     res.json({
         status: 'ONLINE',
         service: 'FinLap Premium Finance Tracker API Service',
-        databaseUrl: process.env.DATABASE_URL || 'Not Configured',
         version: '1.0.0',
         timestamp: new Date().toISOString(),
     });
@@ -44,5 +44,7 @@ app.listen(Number(PORT), '0.0.0.0', async () => {
     // Log server and database status
     console.log(`Server is running on port ${PORT}`);
     console.log(`Database status: ${dbStatus}`);
+    // Start background notification scheduler
+    (0, reminderScheduler_1.startReminderScheduler)();
 });
 exports.default = app;

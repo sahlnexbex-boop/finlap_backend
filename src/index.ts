@@ -26,7 +26,6 @@ app.get('/', (req, res) => {
   res.json({
     status: 'ONLINE',
     service: 'FinLap Premium Finance Tracker API Service',
-    databaseUrl: process.env.DATABASE_URL || 'Not Configured',
     version: '1.0.0',
     timestamp: new Date().toISOString(),
   });

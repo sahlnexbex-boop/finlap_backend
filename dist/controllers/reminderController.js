@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.deleteReminder = exports.updateReminder = exports.createReminder = exports.getReminders = void 0;
 const db_1 = require("../db");
 const userController_1 = require("./userController");
+const reminderScheduler_1 = require("../services/reminderScheduler");
 // GET /api/reminders
 const getReminders = async (req, res) => {
     try {
@@ -89,6 +90,10 @@ const createReminder = async (req, res) => {
                 categoryName: categoryName || null,
             },
         });
+        // Schedule in-app notification
+        (0, reminderScheduler_1.scheduleReminderNotification)(reminder).catch((err) => {
+            console.error('Error scheduling notification on create:', err);
+        });
         res.status(201).json({ success: true, data: reminder });
     }
     catch (error) {
@@ -123,6 +128,9 @@ const updateReminder = async (req, res) => {
                 categoryId: categoryId !== undefined ? categoryId : existing.categoryId,
                 categoryName: categoryName !== undefined ? categoryName : existing.categoryName,
             },
+        });
+        (0, reminderScheduler_1.scheduleReminderNotification)(updated).catch((err) => {
+            console.error('Error scheduling notification on update:', err);
         });
         res.json({ success: true, data: updated });
     }
