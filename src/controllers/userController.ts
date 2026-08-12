@@ -146,14 +146,17 @@ const sendPasswordResetEmail = async (toEmail: string, otp: string) => {
                 We received a request to reset the password for your FinLap account (<strong>${toEmail}</strong>). Use the verification code below to complete your password reset:
               </p>
 
-              <!-- OTP Code Display Card -->
+              <!-- OTP Code Display Card with Copy Icon/Badge -->
               <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin: 28px 0;">
                 <tr>
                   <td align="center">
-                    <div style="background: linear-gradient(135deg, #7C3AED 0%, #8B5CF6 100%); border-radius: 16px; padding: 20px 32px; display: inline-block; box-shadow: 0 8px 24px rgba(124, 58, 237, 0.3);">
-                      <span style="color: #FFFFFF; font-size: 36px; font-weight: 800; letter-spacing: 12px; font-family: 'Courier New', Courier, monospace; display: block; text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);">
+                    <div style="background: linear-gradient(135deg, #7C3AED 0%, #8B5CF6 100%); border-radius: 20px; padding: 22px 36px; display: inline-block; box-shadow: 0 10px 28px rgba(124, 58, 237, 0.35); text-align: center; border: 1px solid rgba(255, 255, 255, 0.2);">
+                      <div style="color: #FFFFFF; font-size: 38px; font-weight: 800; letter-spacing: 14px; font-family: 'Courier New', Courier, monospace; display: block; text-shadow: 0 2px 4px rgba(0, 0, 0, 0.25); user-select: all; -webkit-user-select: all;">
                         ${otp}
-                      </span>
+                      </div>
+                      <div style="margin-top: 10px; display: inline-block; background: rgba(255, 255, 255, 0.18); border-radius: 20px; padding: 4px 14px; color: #FFFFFF; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">
+                        📋 Tap &amp; Hold to Copy
+                      </div>
                     </div>
                   </td>
                 </tr>
