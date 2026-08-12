@@ -89,6 +89,8 @@ export const sendFcmPushNotification = async (payload: FcmNotificationPayload): 
           sound: 'default',
           channelId: 'reminders',
           priority: 'max',
+          color: '#051424',
+          icon: 'notification_icon',
         },
       },
     };

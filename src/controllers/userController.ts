@@ -90,19 +90,122 @@ const sendPasswordResetEmail = async (toEmail: string, otp: string) => {
     },
   });
 
+  const logoPath = path.join(process.cwd(), 'assets', 'logo.png');
+  const hasLogoFile = fs.existsSync(logoPath);
+
+  const attachments = hasLogoFile
+    ? [
+        {
+          filename: 'logo.png',
+          path: logoPath,
+          cid: 'finlaplogo',
+        },
+      ]
+    : [];
+
+  const logoHtml = hasLogoFile
+    ? `<img src="cid:finlaplogo" alt="FinLap Logo" style="width: 54px; height: 54px; border-radius: 14px; display: block;" />`
+    : `<div style="width: 54px; height: 54px; border-radius: 14px; background: linear-gradient(135deg, #7C3AED 0%, #8B5CF6 100%); color: #FFFFFF; font-size: 26px; font-weight: 700; line-height: 54px; text-align: center; margin: 0 auto;">F</div>`;
+
+  const htmlContent = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FinLap Password Reset Code</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #F1F5F9; font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; -webkit-font-smoothing: antialiased;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #F1F5F9; padding: 40px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width: 520px; background-color: #FFFFFF; border-radius: 24px; overflow: hidden; box-shadow: 0 12px 32px rgba(15, 23, 42, 0.08); border: 1px solid #E2E8F0;">
+          
+          <!-- Header Banner with Brand Logo -->
+          <tr>
+            <td style="background: linear-gradient(135deg, #0B101D 0%, #161F33 100%); padding: 36px 32px; text-align: center;">
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                <tr>
+                  <td align="center">
+                    <div style="display: inline-block; padding: 4px; background: rgba(255, 255, 255, 0.1); border-radius: 18px; margin-bottom: 12px;">
+                      ${logoHtml}
+                    </div>
+                    <h1 style="margin: 8px 0 0 0; color: #FFFFFF; font-size: 24px; font-weight: 700; letter-spacing: 0.5px;">FinLap</h1>
+                    <p style="margin: 4px 0 0 0; color: #94A3B8; font-size: 13px; font-weight: 500;">Premium Finance Tracker</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Main Body Content -->
+          <tr>
+            <td style="padding: 36px 32px; background-color: #FFFFFF;">
+              <h2 style="margin: 0 0 12px 0; color: #0F172A; font-size: 20px; font-weight: 700; text-align: center;">Password Reset Request</h2>
+              <p style="margin: 0 0 24px 0; color: #475569; font-size: 15px; line-height: 1.6; text-align: center;">
+                We received a request to reset the password for your FinLap account (<strong>${toEmail}</strong>). Use the verification code below to complete your password reset:
+              </p>
+
+              <!-- OTP Code Display Card -->
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="margin: 28px 0;">
+                <tr>
+                  <td align="center">
+                    <div style="background: linear-gradient(135deg, #7C3AED 0%, #8B5CF6 100%); border-radius: 16px; padding: 20px 32px; display: inline-block; box-shadow: 0 8px 24px rgba(124, 58, 237, 0.3);">
+                      <span style="color: #FFFFFF; font-size: 36px; font-weight: 800; letter-spacing: 12px; font-family: 'Courier New', Courier, monospace; display: block; text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);">
+                        ${otp}
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Expiry & Security Notice -->
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #F8FAFC; border-radius: 12px; border: 1px solid #E2E8F0; margin-bottom: 24px;">
+                <tr>
+                  <td style="padding: 16px 20px;">
+                    <p style="margin: 0 0 6px 0; color: #334155; font-size: 13px; font-weight: 600;">
+                      ⏱️ Valid for 10 minutes
+                    </p>
+                    <p style="margin: 0; color: #64748B; font-size: 12px; line-height: 1.5;">
+                      If you did not request a password reset, please ignore this email or contact support. Your account password remains unchanged.
+                    </p>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin: 0; color: #94A3B8; font-size: 13px; text-align: center;">
+                Need help? Contact our support team directly in the app.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background-color: #F8FAFC; padding: 24px 32px; border-top: 1px solid #E2E8F0; text-align: center;">
+              <p style="margin: 0 0 4px 0; color: #64748B; font-size: 12px; font-weight: 600;">
+                FinLap — Smart Personal & Business Financial Tracking
+              </p>
+              <p style="margin: 0; color: #94A3B8; font-size: 11px;">
+                © ${new Date().getFullYear()} FinLap Inc. All rights reserved. This is an automated security notification.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+  `;
+
   const mailOptions = {
-    from,
+    from: `"FinLap Security" <${from}>`,
     to: toEmail,
-    subject: 'FinLap Password Reset Code',
-    text: `Your FinLap password reset code is ${otp}. It expires in 10 minutes.`,
-    html: `
-      <div style="font-family: Arial, sans-serif;">
-        <p>Hi there,</p>
-        <p>Your FinLap password reset code is <strong>${otp}</strong>.</p>
-        <p>This code is valid for 10 minutes.</p>
-        <p>If you did not request a password reset, please ignore this email.</p>
-      </div>
-    `,
+    subject: `FinLap Password Reset Code: ${otp}`,
+    text: `Your FinLap password reset code is ${otp}. It expires in 10 minutes. If you did not request a password reset, please ignore this email.`,
+    html: htmlContent,
+    attachments,
   };
 
   await transporter.sendMail(mailOptions);

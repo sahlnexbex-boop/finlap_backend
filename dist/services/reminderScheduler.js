@@ -14,7 +14,7 @@ const parseReminderDateTime = (dateStr, timeStr) => {
         let hours = 9; // default 9:00 AM if no time specified
         let minutes = 0;
         if (timeStr && timeStr.trim()) {
-            const rawTime = timeStr.trim();
+            let rawTime = timeStr.trim().replace(/\./g, ':');
             // Check 12-hour format e.g. "02:30 PM" or "2:30 PM"
             const pmMatch = rawTime.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
             if (pmMatch) {
@@ -57,7 +57,7 @@ const scheduleReminderNotification = async (reminder) => {
         return;
     const scheduledDate = (0, exports.parseReminderDateTime)(reminder.date, reminder.time);
     // If scheduled time is due or past, create in-app notification record & send FCM push
-    if (!scheduledDate || scheduledDate <= new Date()) {
+    if (!scheduledDate || scheduledDate.getTime() <= Date.now() + 1000) {
         await (0, exports.ensureInAppNotificationRecord)(reminder, scheduledDate || new Date());
     }
 };
@@ -134,7 +134,7 @@ const checkAndProcessDueReminders = async () => {
         });
         for (const reminder of dueReminders) {
             const scheduledDateTime = (0, exports.parseReminderDateTime)(reminder.date, reminder.time);
-            if (scheduledDateTime && scheduledDateTime <= now) {
+            if (scheduledDateTime && scheduledDateTime.getTime() <= now.getTime() + 1000) {
                 await (0, exports.ensureInAppNotificationRecord)(reminder, scheduledDateTime);
             }
         }
@@ -145,15 +145,15 @@ const checkAndProcessDueReminders = async () => {
 };
 exports.checkAndProcessDueReminders = checkAndProcessDueReminders;
 /**
- * Starts periodic background scheduler (runs every 45 seconds)
+ * Starts periodic background scheduler (runs every 5 seconds for instant minute-start trigger)
  */
 const startReminderScheduler = () => {
     console.log('[Scheduler] Reminder & Notification background worker started.');
     // Initial check
     (0, exports.checkAndProcessDueReminders)();
-    // Set interval every 45s
+    // Set interval to 5 seconds to ensure notifications trigger right at 00s of the scheduled minute
     setInterval(() => {
         (0, exports.checkAndProcessDueReminders)();
-    }, 45000);
+    }, 5000);
 };
 exports.startReminderScheduler = startReminderScheduler;
