@@ -87,6 +87,12 @@ model Transaction {
   isRecurring      Boolean         @default(false)
   attachment       String?
   icon             String          @default("building")
+  isReturnable     Boolean         @default(false)
+  returnableType   String?         // "RECEIVABLE" (money lent) or "PAYABLE" (money borrowed)
+  returnableStatus String?         // "PENDING", "PARTIALLY_SETTLED", "SETTLED"
+  settledAmount    Float           @default(0)
+  relatedTransactionId String?     // Links repayment transaction to original returnable transaction
+  counterparty     String?         // Name of friend / debtor / creditor
   createdAt        DateTime        @default(now())
 }
 

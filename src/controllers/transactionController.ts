@@ -87,6 +87,12 @@ const transactionSelect = {
   fundingSource: true,
   isRecurring: true,
   icon: true,
+  isReturnable: true,
+  returnableType: true,
+  returnableStatus: true,
+  settledAmount: true,
+  relatedTransactionId: true,
+  counterparty: true,
   createdAt: true,
 } as const;
 
@@ -113,7 +119,7 @@ const storeTransactionAttachment = async (transactionId: string, attachmentPath:
 export const getTransactions = async (req: Request, res: Response) => {
   try {
     const userId = resolveRequestUserId(req);
-    const { category, type, search, account, businessEntityId, date, startDate, endDate } = req.query;
+    const { category, type, search, account, businessEntityId, date, startDate, endDate, isReturnable, returnableType } = req.query;
 
     let whereClause: any = { userId };
     if (category && category !== 'ALL') {
@@ -121,6 +127,12 @@ export const getTransactions = async (req: Request, res: Response) => {
     }
     if (type && type !== 'ALL') {
       whereClause.type = normalizeTransactionType(type);
+    }
+    if (isReturnable !== undefined) {
+      whereClause.isReturnable = normalizeBoolean(isReturnable);
+    }
+    if (returnableType && returnableType !== 'ALL') {
+      whereClause.returnableType = String(returnableType);
     }
     if (account && account !== 'ALL') {
       whereClause.OR = [
@@ -179,7 +191,8 @@ export const getTransactions = async (req: Request, res: Response) => {
           t.category.toLowerCase().includes(query) ||
           (t.note && t.note.toLowerCase().includes(query)) ||
           (t.businessName && t.businessName.toLowerCase().includes(query)) ||
-          (t.fundingSource && t.fundingSource.toLowerCase().includes(query))
+          (t.fundingSource && t.fundingSource.toLowerCase().includes(query)) ||
+          (t.counterparty && t.counterparty.toLowerCase().includes(query))
       );
     }
 
@@ -190,6 +203,36 @@ export const getTransactions = async (req: Request, res: Response) => {
     });
   } catch (error) {
     res.status(500).json({ success: false, error: 'Failed to fetch transactions' });
+  }
+};
+
+export const getPendingReturnables = async (req: Request, res: Response) => {
+  try {
+    const userId = resolveRequestUserId(req);
+    const { type } = req.query;
+
+    const whereClause: any = {
+      userId,
+      isReturnable: true,
+      returnableStatus: { in: ['PENDING', 'PARTIALLY_SETTLED'] },
+    };
+    if (type && type !== 'ALL') {
+      whereClause.returnableType = String(type);
+    }
+
+    const list = await prisma.transaction.findMany({
+      where: whereClause,
+      orderBy: { createdAt: 'desc' },
+      select: transactionSelect,
+    });
+
+    res.json({
+      success: true,
+      count: list.length,
+      data: list,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: 'Failed to fetch pending returnable items' });
   }
 };
 
@@ -210,6 +253,10 @@ export const createTransaction = async (req: Request, res: Response) => {
       isRecurring,
       attachment,
       date,
+      isReturnable,
+      returnableType,
+      counterparty,
+      relatedTransactionId,
     } = req.body;
 
     if (!amount) {
@@ -250,9 +297,15 @@ export const createTransaction = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, error: 'Account does not belong to this user' });
     }
 
+    const isReturnableBool = normalizeBoolean(isReturnable);
+    const finalReturnableType = isReturnableBool
+      ? returnableType || (finalType === TRANSACTION_TYPE.EXPENSE ? 'RECEIVABLE' : 'PAYABLE')
+      : null;
+    const finalReturnableStatus = isReturnableBool ? 'PENDING' : null;
+
     const finalBusinessName = selectedEntity?.name || businessName || title || merchant || 'Business Transaction';
     const finalFundingSource = selectedAccount?.name || walletName || 'Account';
-    const displayTitle = finalBusinessName;
+    const displayTitle = counterparty ? `${counterparty} (${finalBusinessName})` : finalBusinessName;
     const uploadedFile = req.file as Express.Multer.File | undefined;
     const attachmentPath = uploadedFile
       ? `/uploads/transaction_attachments/${uploadedFile.filename}`
@@ -276,9 +329,34 @@ export const createTransaction = async (req: Request, res: Response) => {
         isRecurring: normalizeBoolean(isRecurring),
         icon: 'building',
         status: 'COMPLETED',
+        isReturnable: isReturnableBool,
+        returnableType: finalReturnableType,
+        returnableStatus: finalReturnableStatus,
+        settledAmount: 0,
+        relatedTransactionId: relatedTransactionId || null,
+        counterparty: counterparty || null,
       } as any,
       select: transactionSelect,
     });
+
+    // If this transaction settles a parent returnable item, update parent status
+    if (relatedTransactionId) {
+      const parent = await prisma.transaction.findFirst({
+        where: { id: relatedTransactionId, userId },
+      });
+      if (parent) {
+        const parentTotal = Math.abs(parent.amount);
+        const newSettled = (parent.settledAmount || 0) + Math.abs(numericAmount);
+        const newStatus = newSettled >= parentTotal ? 'SETTLED' : 'PARTIALLY_SETTLED';
+        await prisma.transaction.update({
+          where: { id: parent.id },
+          data: {
+            settledAmount: newSettled,
+            returnableStatus: newStatus,
+          },
+        });
+      }
+    }
 
     if (attachmentPath) {
       await storeTransactionAttachment(transaction.id, attachmentPath);
@@ -347,6 +425,26 @@ export const deleteTransaction = async (req: Request, res: Response) => {
         await prisma.account.update({
           where: { id: selectedAccount.id },
           data: { balance: selectedAccount.balance - existing.amount },
+        });
+      }
+    }
+
+    // Revert parent returnable settlement if applicable
+    if (existing.relatedTransactionId) {
+      const parent = await prisma.transaction.findFirst({
+        where: { id: existing.relatedTransactionId, userId },
+      });
+      if (parent) {
+        const parentTotal = Math.abs(parent.amount);
+        const newSettled = Math.max(0, (parent.settledAmount || 0) - Math.abs(existing.amount));
+        const newStatus =
+          newSettled <= 0 ? 'PENDING' : newSettled >= parentTotal ? 'SETTLED' : 'PARTIALLY_SETTLED';
+        await prisma.transaction.update({
+          where: { id: parent.id },
+          data: {
+            settledAmount: newSettled,
+            returnableStatus: newStatus,
+          },
         });
       }
     }

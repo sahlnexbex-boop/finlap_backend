@@ -37,6 +37,12 @@ const transactionSummarySelect = {
   fundingSource: true,
   isRecurring: true,
   icon: true,
+  isReturnable: true,
+  returnableType: true,
+  returnableStatus: true,
+  settledAmount: true,
+  relatedTransactionId: true,
+  counterparty: true,
   createdAt: true,
 } as const;
 
@@ -197,6 +203,30 @@ export const getOverview = async (req: Request, res: Response) => {
       }) ?? [];
     const availableMonths = Array.from(monthSet).sort().reverse();
 
+    // Calculate returnables (Receivables & Payables)
+    const receivableTxs = userTransactions.filter(
+      (t: any) =>
+        t.isReturnable &&
+        (t.returnableType === 'RECEIVABLE' || (!isIncomeTransaction(t) && !t.returnableType)) &&
+        t.returnableStatus !== 'SETTLED'
+    );
+    const payableTxs = userTransactions.filter(
+      (t: any) =>
+        t.isReturnable &&
+        (t.returnableType === 'PAYABLE' || (isIncomeTransaction(t) && !t.returnableType)) &&
+        t.returnableStatus !== 'SETTLED'
+    );
+
+    const totalReceivableAmount = receivableTxs.reduce(
+      (sum, t: any) => sum + Math.max(0, Math.abs(t.amount) - (t.settledAmount || 0)),
+      0
+    );
+    const totalPayableAmount = payableTxs.reduce(
+      (sum, t: any) => sum + Math.max(0, Math.abs(t.amount) - (t.settledAmount || 0)),
+      0
+    );
+    const netReturnableBalance = totalReceivableAmount - totalPayableAmount;
+
     res.json({
       user,
       total: totalTransactionAmount,
@@ -205,6 +235,11 @@ export const getOverview = async (req: Request, res: Response) => {
       totalTransactionAmount,
       totalIncomeAmount,
       totalExpenseAmount,
+      totalReceivableAmount,
+      totalPayableAmount,
+      netReturnableBalance,
+      pendingReceivablesCount: receivableTxs.length,
+      pendingPayablesCount: payableTxs.length,
       growthPercent,
       weeklyAnalytics,
       recentTransactions: allTx.slice(0, 10),

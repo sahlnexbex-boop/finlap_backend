@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { getOverview } from '../controllers/overviewController';
 import {
   getTransactions,
+  getPendingReturnables,
   createTransaction,
   updateTransaction,
   deleteTransaction,
@@ -57,8 +58,12 @@ import {
   deleteNotification,
   sendTestNotification,
 } from '../controllers/notificationController';
+import { syncUserData } from '../controllers/syncController';
 
 const router = Router();
+
+// Sync Endpoint
+router.post('/sync', syncUserData);
 
 
 // Auth Endpoints
@@ -76,6 +81,7 @@ router.get('/overview', getOverview);
 
 // Transactions
 router.get('/transactions', getTransactions);
+router.get('/transactions/pending-returnables', getPendingReturnables);
 router.post('/transactions', transactionAttachmentUpload.single('attachment'), createTransaction);
 router.put('/transactions/:id', transactionAttachmentUpload.single('attachment'), updateTransaction);
 router.post('/transactions/upload-attachment', uploadTransactionAttachment);
