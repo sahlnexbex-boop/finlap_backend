@@ -8,13 +8,12 @@ export const parseReminderDateTime = (dateStr: string, timeStr?: string | null):
   if (!dateStr) return null;
 
   try {
-    const cleanDate = dateStr.trim(); // e.g. "2026-08-06"
-    let hours = 9; // default 9:00 AM if no time specified
+    const cleanDate = dateStr.trim();
+    let hours = 9; // default 9:00 AM
     let minutes = 0;
 
     if (timeStr && timeStr.trim()) {
       let rawTime = timeStr.trim().replace(/\./g, ':');
-      // Check 12-hour format e.g. "02:30 PM" or "2:30 PM"
       const pmMatch = rawTime.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
       if (pmMatch) {
         let h = parseInt(pmMatch[1], 10);
@@ -25,7 +24,6 @@ export const parseReminderDateTime = (dateStr: string, timeStr?: string | null):
         hours = h;
         minutes = m;
       } else {
-        // 24-hour format e.g. "14:30"
         const parts = rawTime.split(':');
         if (parts.length >= 2) {
           hours = parseInt(parts[0], 10) || 0;
@@ -37,8 +35,7 @@ export const parseReminderDateTime = (dateStr: string, timeStr?: string | null):
     const [year, month, day] = cleanDate.split('-').map((v) => parseInt(v, 10));
     if (!year || !month || !day) return null;
 
-    const scheduledDate = new Date(year, month - 1, day, hours, minutes, 0, 0);
-    return scheduledDate;
+    return new Date(year, month - 1, day, hours, minutes, 0, 0);
   } catch (e) {
     console.error('Error parsing reminder date time:', e);
     return null;
@@ -53,60 +50,68 @@ export const scheduleReminderNotification = async (reminder: any) => {
 
   const scheduledDate = parseReminderDateTime(reminder.date, reminder.time);
 
-  // If scheduled time is due or past, create in-app notification record & send FCM push
+  // If scheduled time is due or past, ensure notification record is created
   if (!scheduledDate || scheduledDate.getTime() <= Date.now() + 1000) {
     await ensureInAppNotificationRecord(reminder, scheduledDate || new Date());
   }
 };
 
 /**
- * Creates in-app Notification DB record & sends FCM push notification if user has registered FCM token
+ * Creates in-app Notification DB record & sends FCM push notification ONLY if not already notified
  */
 export const ensureInAppNotificationRecord = async (reminder: any, scheduledAt?: Date) => {
   try {
+    if (!reminder || !reminder.userId || !reminder.id) return;
+
+    // Check if a notification has ALREADY been created for this reminderId or title
     const existing = await (prisma as any).notification.findFirst({
       where: {
         userId: reminder.userId,
-        reminderId: reminder.id,
+        OR: [
+          { reminderId: String(reminder.id) },
+          { title: reminder.title },
+        ],
       },
     });
 
-    if (!existing) {
-      const formattedAmount = reminder.amount ? Number(reminder.amount) : null;
-      await (prisma as any).notification.create({
+    // If notification already exists, skip duplicate creation completely
+    if (existing) {
+      return;
+    }
+
+    const formattedAmount = reminder.amount ? Number(reminder.amount) : null;
+    await (prisma as any).notification.create({
+      data: {
+        userId: reminder.userId,
+        reminderId: String(reminder.id),
+        title: reminder.title,
+        message: reminder.notes || `Reminder due for ${reminder.title}${reminder.amount ? ` ($${Number(reminder.amount).toFixed(2)})` : ''}`,
+        amount: formattedAmount,
+        categoryName: reminder.categoryName || 'Reminder',
+        scheduledAt: scheduledAt || new Date(),
+        isRead: false,
+      },
+    });
+
+    // Dispatch FCM Push Notification if user has an active fcmToken and notifications enabled
+    const user = await (prisma as any).user.findUnique({
+      where: { id: reminder.userId },
+      select: { fcmToken: true, notifications: true },
+    });
+
+    if (user && user.notifications && user.fcmToken) {
+      const amountStr = reminder.amount ? `$${Number(reminder.amount).toFixed(2)}` : '';
+      const bodyText = reminder.notes || `Reminder due for ${reminder.title} ${amountStr ? `(${amountStr})` : ''}`.trim();
+
+      await sendFcmPushNotification({
+        fcmToken: user.fcmToken,
+        title: `Reminder: ${reminder.title}`,
+        body: bodyText,
         data: {
-          userId: reminder.userId,
-          reminderId: reminder.id,
-          title: reminder.title,
-          message: reminder.notes || `Reminder due for ${reminder.title} (${reminder.amount ? `$${Number(reminder.amount).toFixed(2)}` : ''})`,
-          amount: formattedAmount,
-          categoryName: reminder.categoryName || 'Reminder',
-          scheduledAt: scheduledAt || new Date(),
-          isRead: false,
+          reminderId: String(reminder.id),
+          type: 'REMINDER_DUE',
         },
       });
-      console.log(`[Scheduler] In-app notification created for reminder: ${reminder.id}`);
-
-      // Dispatch FCM Push Notification if user has an active fcmToken and notifications enabled
-      const user = await (prisma as any).user.findUnique({
-        where: { id: reminder.userId },
-        select: { fcmToken: true, notifications: true },
-      });
-
-      if (user && user.notifications && user.fcmToken) {
-        const amountStr = reminder.amount ? `$${Number(reminder.amount).toFixed(2)}` : '';
-        const bodyText = reminder.notes || `Reminder due for ${reminder.title} ${amountStr ? `(${amountStr})` : ''}`.trim();
-        
-        await sendFcmPushNotification({
-          fcmToken: user.fcmToken,
-          title: `Reminder: ${reminder.title}`,
-          body: bodyText,
-          data: {
-            reminderId: String(reminder.id),
-            type: 'REMINDER_DUE',
-          },
-        });
-      }
     }
   } catch (err) {
     console.error('[Scheduler] Error processing reminder notification:', err);
@@ -114,12 +119,11 @@ export const ensureInAppNotificationRecord = async (reminder: any, scheduledAt?:
 };
 
 /**
- * Background worker checking due reminders periodically
+ * Background worker checking due pending reminders
  */
 export const checkAndProcessDueReminders = async () => {
   try {
     const now = new Date();
-    // Get ISO date string for today e.g. "2026-08-06"
     const year = now.getFullYear();
     const month = String(now.getMonth() + 1).padStart(2, '0');
     const day = String(now.getDate()).padStart(2, '0');
@@ -146,14 +150,14 @@ export const checkAndProcessDueReminders = async () => {
 };
 
 /**
- * Starts periodic background scheduler (runs every 5 seconds for instant minute-start trigger)
+ * Starts periodic background scheduler (runs once per minute to check due reminders)
  */
 export const startReminderScheduler = () => {
-  console.log('[Scheduler] Reminder & Notification background worker started.');
+  console.log('[Scheduler] Reminder background worker started.');
   // Initial check
   checkAndProcessDueReminders();
-  // Set interval to 5 seconds to ensure notifications trigger right at 00s of the scheduled minute
+  // Check once every minute
   setInterval(() => {
     checkAndProcessDueReminders();
-  }, 5000);
+  }, 60000);
 };
